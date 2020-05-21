@@ -1,0 +1,14 @@
+# Important Notice
+
+PIEOS builders make available PIEOS smart contracts and other software, updates, patches and documentation (collectively, Software) on a voluntary basis as a member of the EOSIO community.  A condition of you accessing any Software, websites, articles, media, publications, documents or other material (collectively, Material) is your acceptance of the terms of this important notice.
+
+## Software
+We are not responsible for ensuring the overall performance of Software or any related applications.  Any test results or performance figures are indicative and will not reflect performance under all conditions.  Software may contain components that are open sourced and subject to their own licenses; you are responsible for ensuring your compliance with those licenses.
+
+We make no representation, warranty, guarantee or undertaking in respect of Software, whether expressed or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement.  In no event shall we be liable for any claim, damages or other liability, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the Software or the use or other dealings in the Software.
+
+Wallets and related components are complex software that require the highest levels of security. If incorrectly built or used, they may compromise users’ private keys and digital assets. Wallet applications and related components should undergo thorough security evaluations before being used. Only experienced developers should work with such Software.
+
+Material is not made available to any person or entity that is the subject of sanctions administered or enforced by any country or government or otherwise designated on any list of prohibited or restricted parties (including but not limited to the lists maintained by the United Nations Security Council, the U.S. Government, the European Union or its Member States, or other applicable government authority) or organized or resident in a country or territory that is the subject of country-wide or territory-wide sanctions.  You represent and warrant that neither you nor any party having a direct or indirect beneficial interest in you or on whose behalf you are acting as agent or nominee is such a person or entity and you will comply with all applicable import, re-import, sanctions, anti-boycott, export, and re-export control laws and regulations.  If this is not accurate or you do not agree, then you must immediately cease accessing our Material and delete all copies of Software.
+
+Any person using or offering Software in connection with providing software, goods or services to third parties shall advise such third parties of this important notice, including all limitations, restrictions and exclusions of liability.
