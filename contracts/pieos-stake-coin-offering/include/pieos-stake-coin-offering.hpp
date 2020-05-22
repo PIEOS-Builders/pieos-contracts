@@ -25,28 +25,28 @@ namespace pieos {
 
       pieos_sco( name s, name code, datastream<const char*> ds );
 
-//      /**
-//       * token transfer action notification handler,
-//       * called when EOS token on eosio.token contract is transferred to this pieos-sco contract account
-//       *
-//       * @param from - the account to transfer from,
-//       * @param to - the account to be transferred to,
-//       * @param quantity - the quantity of tokens to be transferred,
-//       * @param memo - the memo string to accompany the transaction.
-//       */
-//      void receive_token( const name&    from,
-//                          const name&    to,
-//                          const asset&   quantity,
-//                          const string&  memo );
-//
-//      /**
-//       * Initialize contract state.
-//       * only the contract account owner can initialize.
-//       *
-//       * @pre stake pool must not be already initialized
-//       */
-//      [[eosio::action]]
-//      void init();
+      /**
+       * token transfer action notification handler,
+       * called when EOS token on eosio.token contract is transferred to this pieos-sco contract account
+       *
+       * @param from - the account to transfer from,
+       * @param to - the account to be transferred to,
+       * @param quantity - the quantity of tokens to be transferred,
+       * @param memo - the memo string to accompany the transaction.
+       */
+      void receive_token( const name&    from,
+                          const name&    to,
+                          const asset&   quantity,
+                          const string&  memo );
+
+      /**
+       * Initialize contract state.
+       * only the contract account owner can initialize.
+       *
+       * @pre stake pool must not be already initialized
+       */
+      [[eosio::action]]
+      void init();
 
    private:
 
@@ -118,15 +118,14 @@ namespace pieos {
       };
       typedef eosio::multi_index< "reserved"_n, reserved_vesting > reserved_vesting_accounts;
 
+      bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
 
-//      bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
-//
-//      struct share_received {
-//         asset staked_share;
-//         asset token_share;
-//      };
-//      share_received add_to_stake_pool( const asset& stake );
-//      void add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received );
+      struct share_received {
+         asset staked_share;
+         asset token_share;
+      };
+      share_received add_to_stake_pool( const asset& stake );
+      void add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received );
 
 //      asset add_to_stake_pool_by_proxy_vote( const asset& proxy_vote );
 //      void add_to_stake_balance_by_proxy_vote( const name& owner, const asset& proxy_vote, const asset& token_share_received );
