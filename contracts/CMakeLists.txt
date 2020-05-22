@@ -28,5 +28,5 @@ if ($ENV{CLION_IDE})
 endif ()
 
 add_subdirectory(pieos-governance-token)
-#add_subdirectory(pieos-stake-coin-offering)
+add_subdirectory(pieos-stake-coin-offering)
 
