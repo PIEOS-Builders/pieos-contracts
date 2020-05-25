@@ -32,6 +32,16 @@ namespace pieos::eosiosystem {
 
    class token_contract_action_interface {
    public:
+
+      /**
+       *  This action issues to `to` account a `quantity` of tokens.
+       *
+       * @param to - the account to issue tokens to, it must be the same as the issuer,
+       * @param quntity - the amount of tokens to be issued,
+       * @memo - the memo string that accompanies the token issue transaction.
+       */
+      virtual void issue( const name& to, const asset& quantity, const string& memo );
+
       /**
        * Allows `from` account to transfer to `to` account the `quantity` tokens.
        * One account is debited and the other is credited with quantity tokens.
@@ -47,7 +57,17 @@ namespace pieos::eosiosystem {
                              const string&  memo );
    };
 
-   using eosio_token_transfer_action = eosio::action_wrapper<"transfer"_n, &token_contract_action_interface::transfer>;
+   using token_issue_action = eosio::action_wrapper<"issue"_n, &token_contract_action_interface::issue>;
+   using token_transfer_action = eosio::action_wrapper<"transfer"_n, &token_contract_action_interface::transfer>;
+
+   asset get_token_balance_from_contract( const name& contract, const name& account, const symbol& symbol ) {
+      accounts_table accounts(contract, account.value);
+      auto itr = accounts.find(symbol.code().raw());
+      if ( itr == accounts.end() ) {
+         return asset( 0, symbol );
+      }
+      return itr->balance;
+   }
 
 
    ///////////////////////////////////////////////////////
@@ -175,5 +195,23 @@ namespace pieos::eosiosystem {
    using eosio_system_updaterex_action = eosio::action_wrapper<"updaterex"_n, &system_contract_action_interface::updaterex>;
    using eosio_system_voteproducer_action = eosio::action_wrapper<"voteproducer"_n, &system_contract_action_interface::voteproducer>;
 
+   asset get_rex_to_eos_balance( const name& account ) {
+      rex_balance_table rex_balances( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
+      auto rb_itr = rex_balances.find( account.value );
+      if ( rb_itr == rex_balances.end() ) {
+         return asset( 0, EOS_SYMBOL );
+      }
+
+      rex_pool_table rex_pool( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
+      auto rp_itr = rex_pool.begin();
+      if ( rp_itr == rex_pool.end() ) {
+         return asset( 0, EOS_SYMBOL );
+      }
+
+      const int64_t S0 = rp_itr->total_lendable.amount;
+      const int64_t R0 = rp_itr->total_rex.amount;
+      const int64_t eos_share = (uint128_t(rb_itr->rex_balance.amount) * S0) / R0;
+      return asset( eos_share, EOS_SYMBOL );
+   }
 
 } // namespace pieos::eosiosystem
