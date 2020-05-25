@@ -13,6 +13,7 @@
 #define EOS_SYMBOL_DECIMAL 4
 #define EOS_SYMBOL eosio::symbol(EOS_SYMBOL_STR,EOS_SYMBOL_DECIMAL)
 
+#define REX_FUND_ACCOUNT "eosio.rex"_n
 #define REX_SYMBOL_STR "REX"
 #define REX_SYMBOL_DECIMAL 4
 #define REX_SYMBOL eosio::symbol(REX_SYMBOL_STR,REX_SYMBOL_DECIMAL)
@@ -21,8 +22,7 @@
 ///////////////////////////////////
 /// PIEOS Governance Token
 
-#define PIEOS_TOKEN_CONTRACT_STR "pieostokenct"
-#define PIEOS_TOKEN_CONTRACT PIEOS_TOKEN_CONTRACT_STR_n
+#define PIEOS_TOKEN_CONTRACT "pieostokenct"_n
 
 #define PIEOS_SYMBOL_STR "PIEOS"
 #define PIEOS_SYMBOL_DECIMAL 4
@@ -32,7 +32,13 @@
 ///////////////////////////////////
 /// PIEOS SCO(Stake-Coin-Offering) Governance Token Distribution
 
-#define PIEOS_SCO_CONTRACT_STR "scopieosdist"
+#define PIEOS_SCO_CONTRACT "pieosscodist"_n
+
+
+///////////////////////////////////
+/// PIEOS BP-voting proxy
+
+#define PIEOS_PROXY_VOTING_ACCOUNT "pieosproxy11"_n
 
 
 ///////////////////////////////////

@@ -3,9 +3,31 @@
 ---
 spec_version: "0.2.0"
 title: Initialize Contract State
-summary: 'Initialize Contract State'
+summary: 'Initialize the SCO contract state'
 icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
 ---
 
-Contract owner initializes the contract state to activate the contract services
+Contract owner initializes the PIEOS SCO(Stake-Coin-Offering) contract state to activate the SCO contract services.
+
+
+<h1 class="contract">stake</h1>
+
+---
+spec_version: "0.2.0"
+title: Stake EOS on SCO(Stake-Coin-Offering) Contract
+summary: 'Stake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to earn PIEOS tokens'
+icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
+---
+
+{{owner}} stakes the EOS amount of {{}} from the deposited EOS fund on the PIEOS SCO(Stake-Coin-Offering) contract.
+
+The {{owner}} receives EOS-share (SEOS) and PIEOS-token share(SPIEOS) from the contract.
+
+The amount of the received SEOS represents the ownership of the {{owner}}’s staked EOS tokens and the profits(excluding contract operation costs) from the staked EOS (EOS-REX profits and BP voting rewards).
+
+The amount of the received SPIEOS represent the right to receive the PIEOS tokens issued to the SCO contract.
+
+SPIEOS owner can get the newly-issued PIEOS tokens proportional to their SCO-staked EOS token amount and the staking time span, inversely proportional to the total amount of EOS tokens being staked by all SCO participants.
+
+
 
