@@ -50,6 +50,19 @@ SPIEOS owner gets the newly-issued PIEOS tokens proportional to their SCO-staked
 
 
 
+<h1 class="contract">proxyvoted</h1>
+
+---
+spec_version: "0.2.0"
+title: Update Proxy Voting Amount
+summary: 'Update the current proxy voting amount of account {{nowrap $action.account}}'
+icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
+---
+
+The PIEOS-proxy account can run `proxyvoted` action to allocate a PIEOS token share amount to the PIEOS SCO participant {{$action.account}} who proxy-voted to the PIEOS-proxy account.
+
+
+
 <h1 class="contract">withdraw</h1>
 
 ---

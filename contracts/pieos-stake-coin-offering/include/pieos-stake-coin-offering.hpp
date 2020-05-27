@@ -65,7 +65,7 @@ namespace pieos {
        * @pre the staking EOS amount must be deposited (transferred) to this SCO contract accout
        */
       [[eosio::action]]
-      void stake( const name& owner, const asset& amount);
+      void stake( const name& owner, const asset& amount );
 
       /**
        * @brief Unstake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to redeem staked EOS tokens and receive PIEOS tokens
@@ -81,7 +81,22 @@ namespace pieos {
        * @pre the staking EOS amount must be equal or less than the owner's staked EOS amount
        */
       [[eosio::action]]
-      void unstake( const name& owner, const asset& amount);
+      void unstake( const name& owner, const asset& amount );
+
+      /**
+       * @brief Update the current proxy voting amount of account {{nowrap $action.account}}
+       *
+       * The PIEOS-proxy account can run `proxyvoted` action to allocate a PIEOS token share amount
+       * to the PIEOS SCO participant {{$action.account}} who proxy-voted to the PIEOS-proxy account.
+       *
+       * @param account - the account that proxy-voted to PIEOS proxy account.
+       * @param proxy_vote - the maximum supply set for the token created.
+       *
+       * @pre Transaction must be signed by PIEOS proxy voting account
+       */
+      [[eosio::action]]
+      void proxyvoted( const name&   account,
+                       const asset&  proxy_vote );
 
       /**
        * @brief Withdraw EOS fund or PIEOS tokens from PIEOS SCO(Stake-Coin-Offering) Contract
@@ -200,7 +215,13 @@ namespace pieos {
       };
       unstake_outcome unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
 
-      asset issue_accrued_SCO_token( const stake_pool_global::const_iterator& sp_itr );
+      struct pool_update_by_proxy_vote {
+         asset total_token_share;
+         asset token_share_delta;
+      };
+      pool_update_by_proxy_vote update_stake_pool_by_proxy_vote( const asset& proxy_vote_delta, const stake_pool_global::const_iterator& sp_itr );
+
+      void issue_accrued_SCO_token( const stake_pool_global::const_iterator& sp_itr );
    };
 
 }
