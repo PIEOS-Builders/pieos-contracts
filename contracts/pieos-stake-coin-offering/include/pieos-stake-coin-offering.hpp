@@ -83,6 +83,14 @@ namespace pieos {
       [[eosio::action]]
       void unstake( const name& owner, const asset& amount);
 
+      /**
+       * @brief Withdraw EOS fund or PIEOS tokens from PIEOS SCO(Stake-Coin-Offering) Contract
+       *
+       * @param owner - account withdrawing its tokens
+       * @param amount - withdrawing token balance (EOS or PIEOS)
+       */
+      [[eosio::action]]
+      void withdraw( const name& owner, const asset& amount );
 
    private:
 
