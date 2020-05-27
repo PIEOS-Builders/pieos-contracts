@@ -68,11 +68,20 @@ namespace pieos {
       void stake( const name& owner, const asset& amount);
 
       /**
+       * @brief Unstake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to redeem staked EOS tokens and receive PIEOS tokens
        *
+       * {{owner}} unstakes the EOS amount of {{amount}} from the staking pool on the PIEOS SCO(Stake-Coin-Offering) contract.
+       * The {{owner}} receives the redeemed EOS fund including original staked EOS and staking profits, and earned PIEOS token from the contract.
+       * The amount of the received SEOS represents the ownership of the {{owner}}’s staked EOS tokens and the profits(excluding contract operation costs) from the staked EOS (EOS-REX profits and BP voting rewards).
+       * SPIEOS owner gets the newly-issued PIEOS tokens proportional to their SCO-staked EOS token amount and the staking time span, inversely proportional to the total amount of EOS tokens being staked by all SCO participants.
+       *
+       * @param owner - account unstaking its staked EOS fund
+       * @param amount - unstaking EOS balance
+       *
+       * @pre the staking EOS amount must be equal or less than the owner's staked EOS amount
        */
-//      [[eosio::action]]
-//      void unstake( const name& owner, const asset& amount);
-
+      [[eosio::action]]
+      void unstake( const name& owner, const asset& amount);
 
 
    private:
@@ -157,14 +166,16 @@ namespace pieos {
       static constexpr int64_t FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO = -2;
       static constexpr int64_t FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO = -3;
 
-      void sub_token_balance( const name& owner, const asset& value );
       void add_token_balance( const name& owner, const asset& value, const name& ram_payer );
-      asset get_token_balance( const name& account, const symbol& symbol );
+      void sub_token_balance( const name& owner, const asset& value );
+      asset get_token_balance( const name& account, const symbol& symbol ) const;
 
       void set_account_type( const name& account, const int64_t type_flag );
-      bool is_account_type( const name& account, const int64_t type_flag );
+      bool is_account_type( const name& account, const int64_t type_flag ) const;
+      void check_staking_allowed_account( const name& account ) const;
 
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
+      asset get_total_eos_amount_for_staked() const;
 
       struct share_received {
          asset staked_share;
@@ -174,7 +185,14 @@ namespace pieos {
       share_received add_to_stake_pool( const asset& stake );
       void add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received );
 
+      struct unstake_outcome {
+         asset redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
+         asset token_earned;  // symbol:(PIEOS, 4) - received PIEOS token balance
+         asset rex_to_sell; // symbol:(REX, 4)
+      };
+      unstake_outcome unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
 
+      asset issue_accrued_SCO_token( const stake_pool_global::const_iterator& sp_itr );
    };
 
 }

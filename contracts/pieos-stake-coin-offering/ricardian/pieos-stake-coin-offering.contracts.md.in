@@ -19,7 +19,7 @@ summary: 'Stake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to earn PI
 icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
 ---
 
-{{owner}} stakes the EOS amount of {{}} from the deposited EOS fund on the PIEOS SCO(Stake-Coin-Offering) contract.
+{{owner}} stakes the EOS amount of {{amount}} from the deposited EOS fund on the PIEOS SCO(Stake-Coin-Offering) contract.
 
 The {{owner}} receives EOS-share (SEOS) and PIEOS-token share(SPIEOS) from the contract.
 
@@ -28,6 +28,25 @@ The amount of the received SEOS represents the ownership of the {{owner}}’s st
 The amount of the received SPIEOS represent the right to receive the PIEOS tokens issued to the SCO contract.
 
 SPIEOS owner can get the newly-issued PIEOS tokens proportional to their SCO-staked EOS token amount and the staking time span, inversely proportional to the total amount of EOS tokens being staked by all SCO participants.
+
+
+
+<h1 class="contract">unstake</h1>
+
+---
+spec_version: "0.2.0"
+title: Unstake EOS on SCO(Stake-Coin-Offering) Contract
+summary: 'Unstake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to redeem staked EOS tokens and receive PIEOS tokens'
+icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
+---
+
+{{owner}} unstakes the EOS amount of {{amount}} from the staking pool on the PIEOS SCO(Stake-Coin-Offering) contract.
+
+The {{owner}} receives the redeemed EOS fund including original staked EOS and staking profits, and earned PIEOS token from the contract.
+
+The amount of the received SEOS represents the ownership of the {{owner}}’s staked EOS tokens and the profits(excluding contract operation costs) from the staked EOS (EOS-REX profits and BP voting rewards).
+
+SPIEOS owner gets the newly-issued PIEOS tokens proportional to their SCO-staked EOS token amount and the staking time span, inversely proportional to the total amount of EOS tokens being staked by all SCO participants.
 
 
 

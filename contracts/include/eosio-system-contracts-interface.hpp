@@ -195,13 +195,16 @@ namespace pieos::eosiosystem {
    using eosio_system_updaterex_action = eosio::action_wrapper<"updaterex"_n, &system_contract_action_interface::updaterex>;
    using eosio_system_voteproducer_action = eosio::action_wrapper<"voteproducer"_n, &system_contract_action_interface::voteproducer>;
 
-   asset get_rex_to_eos_balance( const name& account ) {
+   asset get_rex_balance( const name& account ) {
       rex_balance_table rex_balances( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
       auto rb_itr = rex_balances.find( account.value );
       if ( rb_itr == rex_balances.end() ) {
-         return asset( 0, EOS_SYMBOL );
+         return asset( 0, REX_SYMBOL );
       }
+      return rb_itr->rex_balance;
+   }
 
+   asset rex_to_eos_balance( const asset& rex_balance ) {
       rex_pool_table rex_pool( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
       auto rp_itr = rex_pool.begin();
       if ( rp_itr == rex_pool.end() ) {
@@ -210,8 +213,33 @@ namespace pieos::eosiosystem {
 
       const int64_t S0 = rp_itr->total_lendable.amount;
       const int64_t R0 = rp_itr->total_rex.amount;
-      const int64_t eos_share = (uint128_t(rb_itr->rex_balance.amount) * S0) / R0;
-      return asset( eos_share, EOS_SYMBOL );
+      const int64_t eos_balance = (uint128_t(rex_balance.amount) * S0) / R0;
+      return asset( eos_balance, EOS_SYMBOL );
+   }
+
+   asset get_total_rex_to_eos_balance( const name& account ) {
+      asset account_rex_balance = get_rex_balance( account );
+      if ( account_rex_balance.amount <= 0 ) {
+         return asset( 0, EOS_SYMBOL );
+      }
+
+      return rex_to_eos_balance(account_rex_balance);
+   }
+
+   static constexpr uint32_t seconds_per_day = 24 * 3600;
+
+   /**
+    * @brief Calculates maturity time of purchased REX tokens which is 4 days from end
+    * of the day UTC
+    *
+    * @return time_point_sec
+    */
+   time_point_sec get_rex_maturity(block_timestamp buyrex_block_time) {
+      const uint32_t num_of_maturity_buckets = 5;
+      static const uint32_t buyrex_time_sec = buyrex_block_time.to_time_point().sec_since_epoch();
+      static const uint32_t r   = buyrex_time_sec % seconds_per_day;
+      static const time_point_sec rms{ buyrex_time_sec - r + num_of_maturity_buckets * seconds_per_day };
+      return rms;
    }
 
 } // namespace pieos::eosiosystem

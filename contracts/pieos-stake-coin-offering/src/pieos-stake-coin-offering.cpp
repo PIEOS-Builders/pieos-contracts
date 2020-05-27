@@ -52,7 +52,7 @@ namespace pieos {
    void pieos_sco::stake( const name& owner, const asset& amount) {
       check( amount.symbol == EOS_SYMBOL, "stake amount symbol precision mismatch" );
       check( amount.amount > 0, "invalid stake amount" );
-      check( is_account_type(owner, FLAG_NORMAL_USER_ACCOUNT) && owner != FOR_EOS_STAKED_SCO && owner != FOR_PROXY_VOTE_SCO, "stake not allowed for this account" );
+      check_staking_allowed_account( owner );
 
       require_auth(owner);
 
@@ -62,7 +62,7 @@ namespace pieos {
       share_received received = add_to_stake_pool( amount );
       add_to_stake_balance( owner, amount, received.staked_share, received.token_share );
 
-      // deposit rex-fund and buy rex from system contract to earn rex staking profit
+      // (inline actions) deposit rex-fund and buy rex from system contract to earn rex staking profit
       eosio_system_deposit_action deposit_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       deposit_act.send( get_self(), amount );
 
@@ -70,11 +70,41 @@ namespace pieos {
       buyrex_act.send( get_self(), amount );
    }
 
-//   // [[eosio::action]]
-//   void pieos_sco::unstake( const name& owner, const asset& amount) {
-//
-//   }
+   // [[eosio::action]]
+   void pieos_sco::unstake( const name& owner, const asset& amount) {
+      check( amount.symbol == EOS_SYMBOL, "unstake amount symbol precision mismatch" );
+      check( amount.amount > 0, "invalid unstake amount" );
+      check( stake_pool_initialized(), "stake pool not initialized");
+      check_staking_allowed_account( owner );
 
+      require_auth(owner);
+
+      auto sp_itr = _stake_pool_db.begin();
+
+      // issue PIEOS accrued since last issuance time (send inline token issue action to PIEOS token contract)
+      auto issued_balance = issue_accrued_SCO_token( sp_itr );
+      if ( issued_balance.amount > 0 ) {
+         add_token_balance( get_self(), issued_balance, get_self() ); // add unclaimed PIEOS SCO token balance
+      }
+
+      const int64_t unstake_amount = amount.amount;
+      auto unstake_outcome = unstake_from_stake_pool( owner, unstake_amount, sp_itr );
+
+      if ( unstake_outcome.redeemed.amount > 0 ) {
+         // add user's EOS balance on contract
+         add_token_balance( owner, unstake_outcome.redeemed, owner );
+      }
+      if ( unstake_outcome.token_earned.amount > 0 ) {
+         // transfer received PIEOS balance from contract to user
+         sub_token_balance( get_self(), unstake_outcome.token_earned );
+         add_token_balance( owner, unstake_outcome.token_earned, owner );
+      }
+      if (unstake_outcome.rex_to_sell.amount > 0) {
+         // (inline action) sell rex to receive EOS
+         eosio_system_sellrex_action sellrex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+         sellrex_act.send( get_self(), amount );
+      }
+   }
 
    void pieos_sco::add_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
       token_balance_table token_balance_db( get_self(), owner.value );
@@ -101,7 +131,7 @@ namespace pieos {
       });
    }
 
-   asset pieos_sco::get_token_balance( const name& account, const symbol& symbol ) {
+   asset pieos_sco::get_token_balance( const name& account, const symbol& symbol ) const {
       token_balance_table token_balance_db(get_self(), account.value);
       auto itr = token_balance_db.find(symbol.code().raw());
       if ( itr == token_balance_db.end() ) {
@@ -130,13 +160,24 @@ namespace pieos {
       }
    }
 
-   bool pieos_sco::is_account_type( const name& account, const int64_t type_flag ) {
+   bool pieos_sco::is_account_type( const name& account, const int64_t type_flag ) const {
       token_balance_table token_balance_db(get_self(), account.value);
       auto itr = token_balance_db.find(0);
       if ( itr == token_balance_db.end() ) {
          return type_flag == FLAG_NORMAL_USER_ACCOUNT;
       }
       return itr->balance.amount == type_flag;
+   }
+
+   void pieos_sco::check_staking_allowed_account( const name& account ) const {
+      check( is_account_type(account, FLAG_NORMAL_USER_ACCOUNT) && account != FOR_EOS_STAKED_SCO && account != FOR_PROXY_VOTE_SCO, "staking not allowed for this account" );
+   }
+
+   asset pieos_sco::get_total_eos_amount_for_staked() const {
+      asset total_rex_to_eos_balance = get_total_rex_to_eos_balance( get_self() );
+      asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
+      asset total_eos_balance_for_staked = total_rex_to_eos_balance + eos_balance_for_stake_sco;
+      return total_eos_balance_for_staked;
    }
 
    /**
@@ -172,12 +213,9 @@ namespace pieos {
          received.staked_share.amount = share_ratio * stake.amount;
          total_staked_share_amount = received.staked_share.amount;
       } else {
+         asset total_eos_balance_for_staked = get_total_eos_amount_for_staked();
 
-         asset total_rex_to_eos_balance = get_rex_to_eos_balance( get_self() );
-         asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
-
-         const int64_t total_eos_amount_for_staked = total_rex_to_eos_balance.amount + eos_balance_for_stake_sco.amount;
-         const int64_t E0 = total_eos_amount_for_staked;
+         const int64_t E0 = total_eos_balance_for_staked.amount;
          const int64_t E1 = E0 + stake.amount;
          const int64_t SS0 = total_staked_share_amount;
          const int64_t SS1 = (uint128_t(E1) * SS0) / E0;
@@ -240,6 +278,134 @@ namespace pieos {
       }
    }
 
+   /**
+    * @brief processes unstaking transaction.
+    * The staked shares and token shares proportional to the unstaking proportion of the user's total staked EOS
+    * are redeemed to the EOS fund (original staked EOS + staking profits) and the earned PIEOS tokens.
+    * Corresponding table data updates are exucuted.
+    *
+    * @param owner - account unstaking its staked EOS fund
+    * @param unstake_amount - unstaking amount
+    * @return unstake_outcome
+    *   : redeemed - symbol:(EOS,4) - original staked EOS + staking profits
+    *   : token_earned - symbol:(PIEOS, 4) - received PIEOS token balance
+    *
+    * @pre unstake_amount must be equal or less than the owner's staked amount(EOS)
+    */
+   pieos_sco::unstake_outcome pieos_sco::unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr ) {
+      stake_accounts stake_accounts_db( get_self(), owner.value );
+      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account not found" );
+
+      time_point_sec ct_sec(current_time_point());
+      time_point_sec rex_maturity_last_buyrex = get_rex_maturity(sa_itr->last_stake_time);
+
+      check( ct_sec > rex_maturity_last_buyrex, "cannot run unstake until rex maturity time" );
+
+      int64_t stake_account_staked_amount = sa_itr->staked.amount;
+      int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
+      int64_t stake_account_token_share_amount = sa_itr->token_share.amount;
+
+      check( unstake_amount <= stake_account_staked_amount, "not enough staked balance" );
+
+      int64_t total_staked_amount = sp_itr->total_staked.amount;
+      int64_t total_staked_share_amount = sp_itr->total_staked_share.amount;
+      int64_t total_token_share_amount = sp_itr->total_token_share.amount;
+
+      const int64_t staked_share_to_redeem = (uint128_t(unstake_amount) * stake_account_staked_share_amount) / stake_account_staked_amount;
+      const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / stake_account_staked_amount;
+
+      stake_account_staked_amount -= unstake_amount;
+      total_staked_amount -= unstake_amount;
+
+      unstake_outcome outcome { asset( 0, EOS_SYMBOL ), asset ( 0, PIEOS_SYMBOL ), asset( 0, REX_SYMBOL ) };
+
+      if ( staked_share_to_redeem > 0 ) {
+         //asset total_eos_balance_for_staked = get_total_eos_amount_for_staked();
+         asset rex_balance = get_rex_balance( get_self() );
+         asset rex_eos_balance = rex_to_eos_balance( rex_balance );
+         asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
+         asset total_eos_balance_for_staked = rex_eos_balance + eos_balance_for_stake_sco;
+
+         const int64_t eos_proceeds  = (uint128_t(staked_share_to_redeem) * total_eos_balance_for_staked.amount) / total_staked_share_amount;
+         const int64_t rex_amount_to_sell = (uint128_t(staked_share_to_redeem) * rex_balance.amount) / total_staked_share_amount;
+         outcome.redeemed.amount = eos_proceeds;
+         outcome.rex_to_sell.amount = rex_amount_to_sell;
+
+         stake_account_staked_share_amount -= staked_share_to_redeem;
+         total_staked_share_amount -= staked_share_to_redeem;
+      }
+
+      if ( token_share_to_redeem > 0 ) {
+         const asset unredeemed_sco_token_balance = get_token_balance( get_self(), PIEOS_SYMBOL );
+
+         int64_t redeemed_token_amount = uint128_t(unredeemed_sco_token_balance.amount) * token_share_to_redeem / total_token_share_amount;
+         outcome.token_earned.amount = redeemed_token_amount;
+
+         stake_account_token_share_amount -= token_share_to_redeem;
+         total_token_share_amount -= token_share_to_redeem;
+      }
+
+      _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
+         sp.total_staked.amount       = total_staked_amount;
+         sp.total_staked_share.amount = total_staked_share_amount;
+         sp.total_token_share.amount  = total_token_share_amount;
+      });
+
+      stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
+         sa.staked.amount = stake_account_staked_amount;
+         sa.staked_share.amount = stake_account_staked_share_amount;
+         sa.token_share.amount += stake_account_token_share_amount;
+      });
+
+      return outcome;
+   }
+
+   /**
+    * @brief Issue new PIEOS allocated to PIEOS SCO distribution, accrued since last issuance time
+    *
+    * @return newly issued PIEOS token amount
+    */
+   asset pieos_sco::issue_accrued_SCO_token( const stake_pool_global::const_iterator& sp_itr ) {
+      check( stake_pool_initialized(), "stake pool not initialized");
+
+      asset issued(0, PIEOS_SYMBOL );
+
+      const block_timestamp sco_start_block { time_point_sec(SCO_START_TIMESTAMP) };
+      const block_timestamp sco_end_block { time_point_sec(SCO_END_TIMESTAMP) };
+
+      block_timestamp last_issue_block = sp_itr->last_issue_time;
+      block_timestamp current_block = current_block_time();
+
+      if ( current_block.slot <= sco_start_block.slot || last_issue_block.slot >= sco_end_block.slot ) {
+         return issued;
+      }
+
+      if ( current_block.slot > sco_end_block.slot ) {
+         current_block.slot = sco_end_block.slot;
+      }
+
+      if ( last_issue_block.slot < sco_start_block.slot ) {
+         last_issue_block.slot = sco_start_block.slot;
+      }
+
+      const int64_t elapsed = current_block.slot - last_issue_block.slot;
+      const int64_t total_sco_time_period = sco_end_block.slot - sco_start_block.slot;
+      const int64_t token_issue_amount = (uint128_t(PIEOS_DIST_STAKE_COIN_OFFERING) * elapsed) / total_sco_time_period;
+
+      issued.amount = token_issue_amount;
+
+      if (token_issue_amount > 0 ) {
+         token_issue_action token_issue_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+         token_issue_act.send(get_self(), issued, "PIEOS SCO" );
+      }
+
+      _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
+         sp.last_total_issued.amount += token_issue_amount;
+         sp.last_issue_time = current_block;
+      });
+
+      return issued;
+   }
 
 } /// namespace pieos
 
@@ -250,7 +416,7 @@ extern "C" {
       }
       if ( code == receiver ) {
          switch (action) {
-            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake) )
+            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake) )
          }
       }
       eosio_exit(0);
