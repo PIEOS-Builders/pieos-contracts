@@ -246,6 +246,13 @@ namespace pieos {
    }
 
    // [[eosio::action]]
+   void pieos_sco::updaterex( const name& updater ) {
+      require_auth( updater );
+      eosio_system_updaterex_action updaterex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      updaterex_act.send( get_self() );
+   }
+
+   // [[eosio::action]]
    void pieos_sco::setacctype( const name& account, const int64_t type ) {
       require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
       set_account_type( account, type );
@@ -259,10 +266,10 @@ namespace pieos {
    }
 
    // [[eosio::action]]
-   void pieos_sco::updaterex( const name& updater ) {
-      require_auth( updater ); // resource payer
-      eosio_system_updaterex_action updaterex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
-      updaterex_act.send( get_self() );
+   void pieos_sco::voteproducer( const name& proxy, const std::vector<name>& producers ) {
+      require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
+      eosio_system_voteproducer_action voteproducer_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      voteproducer_act.send( get_self(), proxy, producers );
    }
 
 
@@ -639,7 +646,7 @@ extern "C" {
       }
       if ( code == receiver ) {
          switch (action) {
-            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw)(claimvested)(setacctype)(sellram)(updaterex) )
+            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw)(claimvested)(updaterex)(setacctype)(sellram)(voteproducer) )
          }
       }
       eosio_exit(0);

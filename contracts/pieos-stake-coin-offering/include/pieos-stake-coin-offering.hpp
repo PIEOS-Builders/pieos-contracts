@@ -121,6 +121,16 @@ namespace pieos {
       void claimvested( const name& account, const asset& amount );
 
       /**
+       * @brief Update REX for contract account
+       *
+       * Sends `updaterex` action to the system contract with contract's active permission
+       *
+       * @param updater - account executing updaterex action
+       */
+      [[eosio::action]]
+      void updaterex( const name& updater );
+
+      /**
        * @brief [Admin] Set Account Type
        *
        * The PIEOS SCO contract admin account sets a account type for an account {{account}}
@@ -142,14 +152,16 @@ namespace pieos {
       void sellram( const int64_t bytes );
 
       /**
-       * @brief Update REX for contract account
+       * @brief [Admin] Vote Producer or Proxy
        *
-       * Sends `updaterex` action to the system contract with contract's active permission
+       * The PIEOS SCO contract admin account sends `voteproducer` action to the system contract with contract's active permission
        *
-       * @param updater - account executing updaterex action
+       * @param proxy - the proxy to change the voted producers for,
+       * @param producers - the list of producers to vote for, a maximum of 30 producers is allowed.
        */
       [[eosio::action]]
-      void updaterex( const name& updater );
+      void voteproducer( const name& proxy, const std::vector<name>& producers );
+
 
    private:
 
