@@ -182,6 +182,9 @@ namespace pieos {
       sub_token_balance( owner, amount );
 
       if ( amount.symbol == EOS_SYMBOL ) {
+         asset contract_eos_balance = get_token_balance_from_contract( EOS_TOKEN_CONTRACT, get_self(), EOS_SYMBOL );
+         check ( amount <= contract_eos_balance, "not enough SCO contract's EOS balance because of pending REX sell orders" );
+
          token_transfer_action transfer_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
          transfer_act.send( get_self(), owner, amount, "PIEOS SCO" );
       } else if ( amount.symbol == PIEOS_SYMBOL ) {
