@@ -141,6 +141,16 @@ namespace pieos {
       [[eosio::action]]
       void sellram( const int64_t bytes );
 
+      /**
+       * @brief Update REX for contract account
+       *
+       * Sends `updaterex` action to the system contract with contract's active permission
+       *
+       * @param updater - account executing updaterex action
+       */
+      [[eosio::action]]
+      void updaterex( const name& updater );
+
    private:
 
       static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("SEOS"), 4);

@@ -258,6 +258,14 @@ namespace pieos {
       sellram_act.send( get_self(), bytes );
    }
 
+   // [[eosio::action]]
+   void pieos_sco::updaterex( const name& updater ) {
+      require_auth( updater ); // resource payer
+      eosio_system_updaterex_action updaterex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      updaterex_act.send( get_self() );
+   }
+
+
    /////////////////////////////////////////////////////////////////////////
 
    void pieos_sco::add_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
@@ -631,7 +639,7 @@ extern "C" {
       }
       if ( code == receiver ) {
          switch (action) {
-            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw)(claimvested)(setacctype)(sellram) )
+            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw)(claimvested)(setacctype)(sellram)(updaterex) )
          }
       }
       eosio_exit(0);
