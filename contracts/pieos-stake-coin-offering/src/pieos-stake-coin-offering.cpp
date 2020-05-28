@@ -124,7 +124,7 @@ namespace pieos {
       auto stake_pool_update = update_stake_pool_by_proxy_vote( proxy_vote_delta, sp_itr );
 
       // update stake account balances
-      if( sa_itr == stake_accounts_db.end() ) {
+      if ( sa_itr == stake_accounts_db.end() ) {
          check(stake_pool_update.token_share_delta.amount > 0, "invalid token share delta" );
          stake_accounts_db.emplace( get_self(), [&]( auto& sa ){
             sa.staked = asset( 0, EOS_SYMBOL );
@@ -187,11 +187,65 @@ namespace pieos {
       }
    }
 
+   // [[eosio::action]]
+   void pieos_sco::claimvested( const name& account, const asset& amount ) {
+      check( amount.symbol == PIEOS_SYMBOL, "claim amount symbol precision mismatch" );
+      check( amount.amount > 0, "invalid claim amount" );
+
+      require_auth( account );
+
+      const block_timestamp sco_start_block { time_point_sec(SCO_START_TIMESTAMP) };
+      const block_timestamp sco_end_block { time_point_sec(SCO_END_TIMESTAMP) };
+      const int64_t total_sco_time_period = sco_end_block.slot - sco_start_block.slot;
+      block_timestamp current_block = current_block_time();
+
+      check( current_block.slot > sco_start_block.slot, "claim not allowed before SCO start" );
+
+      reserved_vesting_accounts vesting_accounts_db( get_self(), account.value );
+      auto va_itr = vesting_accounts_db.find( amount.symbol.code().raw() );
+      int64_t already_claimed = (va_itr == vesting_accounts_db.end())? 0 : va_itr->issued.amount;
+
+      int64_t max_claimable = 0;
+
+      if ( account == PIEOS_MARKETING_OPERATION_ACCOUNT ) {
+         max_claimable = PIEOS_DIST_MARKETING_OPERATION_FUND;
+      } else if ( account == PIEOS_STABILITY_FUND_ACCOUNT ) {
+         max_claimable = PIEOS_DIST_STABILITY_FUND;
+         check( current_block.slot > sco_start_block.slot + uint32_t(total_sco_time_period) / 2, "PIEOS stability fund locked until the mid point of SCO period" );
+      } else if ( account == PIEOS_DEVELOPMENT_TEAM_ACCOUNT ) {
+         if ( current_block.slot > sco_end_block.slot ) {
+            current_block.slot = sco_end_block.slot;
+         }
+         const int64_t elapsed = current_block.slot - sco_start_block.slot;
+         max_claimable = (uint128_t(PIEOS_DIST_DEVELOPMENT_TEAM) * elapsed) / total_sco_time_period;
+      } else {
+         check( false, "not reserved vesting account" );
+      }
+
+      check( already_claimed + amount.amount <= max_claimable, "exceeds max claimable token amount" );
+
+      if ( va_itr == vesting_accounts_db.end() ) {
+         vesting_accounts_db.emplace( get_self(), [&]( auto& va ){
+            va.issued = amount;
+         });
+      } else {
+         vesting_accounts_db.modify( va_itr, same_payer, [&]( auto& va ) {
+            va.issued += amount;
+         });
+      }
+
+      // (inline actions) issue and transfer PIEOS tokens
+      token_issue_action token_issue_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+      token_issue_act.send(get_self(), amount, "issue vested PIEOS" );
+
+      token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+      transfer_act.send( get_self(), account, amount, "claim vested PIEOS" );
+   }
 
    void pieos_sco::add_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
       token_balance_table token_balance_db( get_self(), owner.value );
       auto to = token_balance_db.find( value.symbol.code().raw() );
-      if( to == token_balance_db.end() ) {
+      if ( to == token_balance_db.end() ) {
          token_balance_db.emplace( ram_payer, [&]( auto& a ){
             a.balance = value;
          });
@@ -229,7 +283,7 @@ namespace pieos {
    void pieos_sco::set_account_type( const name& account, const int64_t type_flag ) {
       token_balance_table token_balance_db( get_self(), account.value );
       auto itr = token_balance_db.find( 0 );
-      if( itr == token_balance_db.end() ) {
+      if ( itr == token_balance_db.end() ) {
          if ( type_flag != FLAG_NORMAL_USER_ACCOUNT ) {
             token_balance_db.emplace( get_self(), [&]( auto& a ){
                a.balance = asset( type_flag, symbol(0) );
@@ -346,7 +400,7 @@ namespace pieos {
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
       auto sa_itr = stake_accounts_db.find( token_share_received.symbol.code().raw() );
-      if( sa_itr == stake_accounts_db.end() ) {
+      if ( sa_itr == stake_accounts_db.end() ) {
          stake_accounts_db.emplace( owner, [&]( auto& sa ){
             sa.staked = stake;
             sa.proxy_vote = asset( 0, EOS_SYMBOL );
@@ -554,7 +608,7 @@ namespace pieos {
 
 extern "C" {
    void apply(uint64_t receiver, uint64_t code, uint64_t action) {
-      if( code == EOS_TOKEN_CONTRACT.value && action == "transfer"_n.value ) {
+      if ( code == EOS_TOKEN_CONTRACT.value && action == "transfer"_n.value ) {
          eosio::execute_action( name(receiver), name(code), &pieos::pieos_sco::receive_token );
       }
       if ( code == receiver ) {

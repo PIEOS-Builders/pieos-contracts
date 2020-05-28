@@ -73,3 +73,16 @@ icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
 ---
 
 {{owner}} withdraws the EOS or PIEOS token amount of {{amount}} from the SCO contract.
+
+
+
+<h1 class="contract">claimvested</h1>
+
+---
+spec_version: "0.2.0"
+title: Claim Vested PIEOS Token
+summary: 'Claim vested/reserved PIEOS token'
+icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
+---
+
+{{account}} claims its vested/reserved PIEOS token amount of {{amount}} from the SCO contract.

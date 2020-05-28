@@ -107,6 +107,15 @@ namespace pieos {
       [[eosio::action]]
       void withdraw( const name& owner, const asset& amount );
 
+      /**
+       * @brief Claim vested/reserved PIEOS token balance
+       *
+       * @param account - account claiming its vested PIEOS tokens
+       * @param amount - PIEOS token balance
+       */
+      [[eosio::action]]
+      void claimvested( const name& account, const asset& amount );
+
    private:
 
       static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("SEOS"), 4);
@@ -117,10 +126,14 @@ namespace pieos {
       static constexpr uint32_t SCO_START_TIMESTAMP = 1590969600; // June 1, 2020 12:00:00 AM (GMT)
       static constexpr uint32_t SCO_END_TIMESTAMP = 1622505600; // June 1, 2021 12:00:00 AM (GMT)
 
-      static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING = 128'000'000'0000ll;
-      static constexpr int64_t PIEOS_DIST_STABILITY_FUND = 18'000'000'0000ll;
-      static constexpr int64_t PIEOS_DIST_MARKETING_OPERATION_FUND = 18'000'000'0000ll;
-      static constexpr int64_t PIEOS_DIST_DEVELOPMENT_TEAM = 36'000'000'0000ll;
+      static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING       = 128'000'000'0000ll;
+      static constexpr int64_t PIEOS_DIST_STABILITY_FUND            = 18'000'000'0000ll;
+      static constexpr int64_t PIEOS_DIST_MARKETING_OPERATION_FUND  = 18'000'000'0000ll;
+      static constexpr int64_t PIEOS_DIST_DEVELOPMENT_TEAM          = 36'000'000'0000ll;
+
+      static constexpr name PIEOS_STABILITY_FUND_ACCOUNT       = name("pieosstbfund");
+      static constexpr name PIEOS_MARKETING_OPERATION_ACCOUNT  = name("pieosmarketi");
+      static constexpr name PIEOS_DEVELOPMENT_TEAM_ACCOUNT     = name("pieosdevteam");
 
       /**
        * total_staked - symbol:(EOS,4), sum of the `staked` of every stake-account
