@@ -86,3 +86,16 @@ icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
 ---
 
 {{account}} claims its vested/reserved PIEOS token amount of {{amount}} from the SCO contract.
+
+
+
+<h1 class="contract">setacctype</h1>
+
+---
+spec_version: "0.2.0"
+title: [Admin] Set Account Type
+summary: '[Admin] Set Account Type'
+icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
+---
+
+The PIEOS SCO contract admin account sets a account type for an account {{account}}

@@ -242,6 +242,15 @@ namespace pieos {
       transfer_act.send( get_self(), account, amount, "claim vested PIEOS" );
    }
 
+   // [[eosio::action]]
+   void pieos_sco::setacctype( const name& account, const int64_t type ) {
+      require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
+      set_account_type( account, type );
+   }
+
+
+   /////////////////////////////////////////////////////////////////////////
+
    void pieos_sco::add_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
       token_balance_table token_balance_db( get_self(), owner.value );
       auto to = token_balance_db.find( value.symbol.code().raw() );

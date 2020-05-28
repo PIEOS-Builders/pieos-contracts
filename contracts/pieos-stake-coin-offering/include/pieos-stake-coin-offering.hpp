@@ -101,6 +101,8 @@ namespace pieos {
       /**
        * @brief Withdraw EOS fund or PIEOS tokens from PIEOS SCO(Stake-Coin-Offering) Contract
        *
+       *  {{owner}} withdraws the EOS or PIEOS token amount of {{amount}} from the SCO contract.
+       *
        * @param owner - account withdrawing its tokens
        * @param amount - withdrawing token balance (EOS or PIEOS)
        */
@@ -110,11 +112,24 @@ namespace pieos {
       /**
        * @brief Claim vested/reserved PIEOS token balance
        *
+       * {{account}} claims its vested/reserved PIEOS token amount of {{amount}} from the SCO contract.
+       *
        * @param account - account claiming its vested PIEOS tokens
        * @param amount - PIEOS token balance
        */
       [[eosio::action]]
       void claimvested( const name& account, const asset& amount );
+
+      /**
+       * @brief [Admin] Set Account Type
+       *
+       * The PIEOS SCO contract admin account sets a account type for an account {{account}}
+       *
+       * @param account
+       * @param type
+       */
+      [[eosio::action]]
+      void setacctype( const name& account, const int64_t type );
 
    private:
 
@@ -134,6 +149,11 @@ namespace pieos {
       static constexpr name PIEOS_STABILITY_FUND_ACCOUNT       = name("pieosstbfund");
       static constexpr name PIEOS_MARKETING_OPERATION_ACCOUNT  = name("pieosmarketi");
       static constexpr name PIEOS_DEVELOPMENT_TEAM_ACCOUNT     = name("pieosdevteam");
+
+      // The PIEOS SCO contract admin account has right to execute restricted administration operations for PIEOS SCO contract
+      // such as designating BP-voting reward sending account, resource(RAM) management, REX order management, BP vote management.
+      // The admin account exists because the ownership of PIEOS SCO contract account will be resigned to EOS block producers
+      static constexpr name PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT   = name("pieosadminac");
 
       /**
        * total_staked - symbol:(EOS,4), sum of the `staked` of every stake-account
