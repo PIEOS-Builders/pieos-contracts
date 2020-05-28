@@ -14,6 +14,7 @@
 #define EOS_SYMBOL eosio::symbol(EOS_SYMBOL_STR,EOS_SYMBOL_DECIMAL)
 
 #define REX_FUND_ACCOUNT "eosio.rex"_n
+#define REX_RAM_FUND_ACCOUNT "eosio.ram"_n
 #define REX_SYMBOL_STR "REX"
 #define REX_SYMBOL_DECIMAL 4
 #define REX_SYMBOL eosio::symbol(REX_SYMBOL_STR,REX_SYMBOL_DECIMAL)

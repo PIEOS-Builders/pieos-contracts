@@ -42,6 +42,9 @@ namespace pieos {
       } else if ( is_account_type(from, FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO ) ) {
          // add EOS token balance to internal account for Proxy-Vote SCO
          add_token_balance( FOR_PROXY_VOTE_SCO, quantity, get_self() );
+      } else if ( from == REX_RAM_FUND_ACCOUNT ) {
+         // add EOS token balance to internal account for contract admin
+         add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, quantity, get_self() );
       } else {
          // add EOS token balance to user account
          add_token_balance( from, quantity, from );
@@ -248,6 +251,12 @@ namespace pieos {
       set_account_type( account, type );
    }
 
+   // [[eosio::action]]
+   void pieos_sco::sellram( const int64_t bytes ) {
+      require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
+      eosio_system_sellram_action sellram_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      sellram_act.send( get_self(), bytes );
+   }
 
    /////////////////////////////////////////////////////////////////////////
 
@@ -622,7 +631,7 @@ extern "C" {
       }
       if ( code == receiver ) {
          switch (action) {
-            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw) )
+            EOSIO_DISPATCH_HELPER(pieos::pieos_sco, (init)(stake)(unstake)(proxyvoted)(withdraw)(claimvested)(setacctype)(sellram) )
          }
       }
       eosio_exit(0);

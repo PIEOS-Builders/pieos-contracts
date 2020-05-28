@@ -131,6 +131,16 @@ namespace pieos {
       [[eosio::action]]
       void setacctype( const name& account, const int64_t type );
 
+      /**
+       * @brief [Admin] Sell RAM
+       *
+       * The PIEOS SCO contract admin account sends `sellram` action to the system contract with contract's active permission
+       *
+       * @param bytes - the amount of ram to sell in bytes.
+       */
+      [[eosio::action]]
+      void sellram( const int64_t bytes );
+
    private:
 
       static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("SEOS"), 4);

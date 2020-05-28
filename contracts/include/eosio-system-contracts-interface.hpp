@@ -163,6 +163,15 @@ namespace pieos::eosiosystem {
       virtual void updaterex( const name& owner );
 
       /**
+       * Sell ram action, reduces quota by bytes and then performs an inline transfer of tokens
+       * to receiver based upon the average purchase price of the original quota.
+       *
+       * @param account - the ram seller account,
+       * @param bytes - the amount of ram to sell in bytes.
+       */
+      virtual void sellram( const name& account, int64_t bytes );
+
+      /**
        * Vote producer action, votes for a set of producers. This action updates the list of `producers` voted for,
        * for `voter` account. If voting for a `proxy`, the producer votes will not change until the
        * proxy updates their own vote. Voter can vote for a proxy __or__ a list of at most 30 producers.
@@ -193,6 +202,7 @@ namespace pieos::eosiosystem {
    using eosio_system_buyrex_action = eosio::action_wrapper<"buyrex"_n, &system_contract_action_interface::buyrex>;
    using eosio_system_sellrex_action = eosio::action_wrapper<"sellrex"_n, &system_contract_action_interface::sellrex>;
    using eosio_system_updaterex_action = eosio::action_wrapper<"updaterex"_n, &system_contract_action_interface::updaterex>;
+   using eosio_system_sellram_action = eosio::action_wrapper<"sellram"_n, &system_contract_action_interface::sellram>;
    using eosio_system_voteproducer_action = eosio::action_wrapper<"voteproducer"_n, &system_contract_action_interface::voteproducer>;
 
    asset get_rex_balance( const name& account ) {
