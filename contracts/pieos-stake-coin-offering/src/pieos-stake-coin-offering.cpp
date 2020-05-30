@@ -20,12 +20,13 @@ namespace pieos {
 
       /// initialize stake pool
       _stake_pool_db.emplace( get_self(), [&]( auto& sp ) {
-         sp.total_staked         = asset( 0, EOS_SYMBOL );
-         sp.total_proxy_vote     = asset( 0, EOS_SYMBOL );
-         sp.total_staked_share   = asset( 0, STAKED_SHARE_SYMBOL );
-         sp.total_token_share    = asset( 0, TOKEN_SHARE_SYMBOL );
-         sp.last_total_issued    = asset( 0, PIEOS_SYMBOL );
-         sp.last_issue_time      = block_timestamp(0);
+         sp.total_staked            = asset( 0, EOS_SYMBOL );
+         sp.total_staked_share      = asset( 0, STAKED_SHARE_SYMBOL );
+         sp.total_proxy_vote        = asset( 0, EOS_SYMBOL );
+         sp.total_proxy_vote_share  = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
+         sp.total_token_share       = asset( 0, TOKEN_SHARE_SYMBOL );
+         sp.last_total_issued       = asset( 0, PIEOS_SYMBOL );
+         sp.last_issue_time         = block_timestamp(0);
       });
    }
 
@@ -59,10 +60,14 @@ namespace pieos {
 
       require_auth(owner);
 
-      // subtract user's EOS balances
+      // subtract user's on-contract EOS balance which is being deposited to EOS REX fund.
       sub_token_balance( owner, amount );
 
-      share_received received = add_to_stake_pool( amount );
+      auto sp_itr = _stake_pool_db.begin();
+      // issue PIEOS accrued since last issuance time (send inline token issue action to PIEOS token contract)
+      issue_accrued_SCO_token( sp_itr );
+
+      share_received received = add_to_stake_pool( amount, sp_itr );
       add_to_stake_balance( owner, amount, received.staked_share, received.token_share );
 
       // (inline actions) deposit rex-fund and buy rex from system contract to earn rex staking profit
@@ -90,15 +95,26 @@ namespace pieos {
       const int64_t unstake_amount = amount.amount;
       auto unstake_outcome = unstake_from_stake_pool( owner, unstake_amount, sp_itr );
 
-      if ( unstake_outcome.redeemed.amount > 0 ) {
-         // add user's EOS balance on contract
-         add_token_balance( owner, unstake_outcome.redeemed, owner );
-      }
       if ( unstake_outcome.token_earned.amount > 0 ) {
-         // transfer received PIEOS balance from contract to user
+         // transfer received PIEOS balance ownership from contract to user
          sub_token_balance( get_self(), unstake_outcome.token_earned );
          add_token_balance( owner, unstake_outcome.token_earned, owner );
       }
+
+      if ( unstake_outcome.staked_and_profit_redeemed.amount > 0 ) {
+         // redeemed EOS fund (original staked EOS + staking profits)
+         asset redeemed_to_unstaker = unstake_outcome.staked_and_profit_redeemed;
+
+         const int64_t eos_staking_profit = unstake_outcome.staked_and_profit_redeemed.amount - unstake_amount;
+         const int64_t contract_profit = eos_staking_profit * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
+         if ( contract_profit > 0 ) {
+            redeemed_to_unstaker.amount -= contract_profit;
+            add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, EOS_SYMBOL ), get_self() );
+         }
+         // add user's on-contract EOS balance
+         add_token_balance( owner, redeemed_to_unstaker, owner );
+      }
+
       if (unstake_outcome.rex_to_sell.amount > 0) {
          // (inline action) sell rex to receive EOS
          eosio_system_sellrex_action sellrex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
@@ -118,54 +134,42 @@ namespace pieos {
 
       auto sp_itr = _stake_pool_db.begin();
 
-      stake_accounts stake_accounts_db( get_self(), account.value );
-      auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
-      asset current_proxy_vote = (sa_itr == stake_accounts_db.end()) ? asset( 0, EOS_SYMBOL ) : sa_itr->proxy_vote;
+      asset current_proxy_vote( 0, EOS_SYMBOL );
+      {
+         stake_accounts stake_accounts_db( get_self(), account.value );
+         auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
+         current_proxy_vote.amount = (sa_itr == stake_accounts_db.end()) ? 0 : sa_itr->proxy_vote.amount;
+      }
 
       asset proxy_vote_delta = proxy_vote - current_proxy_vote;
       check( proxy_vote.amount == 0 || proxy_vote_delta.amount >= 1'0000 || proxy_vote_delta.amount < -1'0000, "invalid proxy_vote_delta" );
-      auto stake_pool_update = update_stake_pool_by_proxy_vote( proxy_vote_delta, sp_itr );
 
-      // update stake account balances
-      if ( sa_itr == stake_accounts_db.end() ) {
-         check(stake_pool_update.token_share_delta.amount > 0, "invalid token share delta" );
-         stake_accounts_db.emplace( get_self(), [&]( auto& sa ){
-            sa.staked = asset( 0, EOS_SYMBOL );
-            sa.proxy_vote = proxy_vote;
-            sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
-            sa.token_share = stake_pool_update.token_share_delta;
-            sa.last_stake_time = block_timestamp(0);
-         });
+      // issue PIEOS accrued since last issuance time (send inline token issue action to PIEOS token contract)
+      issue_accrued_SCO_token( sp_itr );
+
+      if ( proxy_vote_delta.amount > 0 ) {
+         stake_by_proxy_vote( account, proxy_vote_delta.amount, sp_itr );
       } else {
-         if ( proxy_vote.amount == 0
-              && sa_itr->staked.amount == 0
-              && sa_itr->staked_share.amount == 0
-              && sa_itr->token_share.amount + stake_pool_update.token_share_delta.amount == 0 ) {
-            stake_accounts_db.erase( sa_itr );
-         } else {
-            stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
-               sa.proxy_vote.amount = proxy_vote.amount;
-               sa.token_share.amount += stake_pool_update.token_share_delta.amount;
-            });
+         const int64_t unstake_proxy_vote_amount = -proxy_vote_delta.amount;
+         auto unstake_by_proxy_outcome = unstake_by_proxy_vote( account, unstake_proxy_vote_amount, sp_itr );
+
+         if ( unstake_by_proxy_outcome.token_earned.amount > 0 ) {
+            // transfer received PIEOS balance ownership from contract to user
+            sub_token_balance( get_self(), unstake_by_proxy_outcome.token_earned );
+            add_token_balance( account, unstake_by_proxy_outcome.token_earned, get_self() );
          }
-      }
 
-      if (stake_pool_update.token_share_delta.amount < 0 ) {
-         // allocate redeemed PIEOS tokens to proxy-vote staking account
+         if ( unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount > 0 ) {
+            // redeemed proxy-vote profit
+            asset redeemed_to_unstaker = unstake_by_proxy_outcome.proxy_vote_profit_redeemed;
 
-         // issue PIEOS accrued since last issuance time (send inline token issue action to PIEOS token contract)
-         issue_accrued_SCO_token( sp_itr );
-
-         const asset unredeemed_sco_token_balance = get_token_balance( get_self(), PIEOS_SYMBOL );
-
-         const int64_t token_share_to_redeem = -stake_pool_update.token_share_delta.amount;
-         const int64_t redeemed_token_amount = uint128_t(token_share_to_redeem) * unredeemed_sco_token_balance.amount / (stake_pool_update.total_token_share.amount + token_share_to_redeem);
-
-         if ( redeemed_token_amount > 0 ) {
-            // transfer received PIEOS balance from contract to user
-            asset redeemed( redeemed_token_amount, PIEOS_SYMBOL );
-            sub_token_balance( get_self(), redeemed );
-            add_token_balance( account, redeemed, get_self() );
+            const int64_t contract_profit = unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
+            if ( contract_profit > 0 ) {
+               redeemed_to_unstaker.amount -= contract_profit;
+               add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, EOS_SYMBOL ), get_self() );
+            }
+            // add user's on-contract EOS balance
+            add_token_balance( account, redeemed_to_unstaker, get_self() );
          }
       }
    }
@@ -363,7 +367,7 @@ namespace pieos {
     *
     * @return share_received - calculated amount of SEOS, SPIEOS tokens received
     */
-   pieos_sco::share_received pieos_sco::add_to_stake_pool( const asset& stake ) {
+   pieos_sco::share_received pieos_sco::add_to_stake_pool( const asset& stake, const stake_pool_global::const_iterator& sp_itr ) {
       check( stake_pool_initialized(), "stake pool not initialized");
       check( stake.symbol == EOS_SYMBOL, "stake symbol precision mismatch" );
       check( stake.amount >= 1'0000, "stake, proxy_vote under minimum delta amount" );
@@ -378,14 +382,12 @@ namespace pieos {
 
       share_received received { asset( 0, STAKED_SHARE_SYMBOL ), asset ( 0, TOKEN_SHARE_SYMBOL ) };
 
-      auto itr = _stake_pool_db.begin();
+      int64_t total_staked_amount = sp_itr->total_staked.amount;
+      int64_t total_proxy_vote_amount = sp_itr->total_proxy_vote.amount;
+      int64_t total_staked_share_amount = sp_itr->total_staked_share.amount;
+      int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
-      int64_t total_staked_amount = itr->total_staked.amount;
-      int64_t total_proxy_vote_amount = itr->total_proxy_vote.amount;
-      int64_t total_staked_share_amount = itr->total_staked_share.amount;
-      int64_t total_token_share_amount = itr->total_token_share.amount;
-
-      if (total_staked_share_amount == 0) {
+      if ( total_staked_share_amount == 0 ) {
          received.staked_share.amount = share_ratio * stake.amount;
          total_staked_share_amount = received.staked_share.amount;
       } else {
@@ -395,25 +397,29 @@ namespace pieos {
          const int64_t E1 = E0 + stake.amount;
          const int64_t SS0 = total_staked_share_amount;
          const int64_t SS1 = (uint128_t(E1) * SS0) / E0;
+
          received.staked_share.amount = SS1 - SS0;
          total_staked_share_amount = SS1;
       }
 
-      if (total_token_share_amount == 0) {
+      if ( total_token_share_amount == 0 ) {
          received.token_share.amount = stake.amount * share_ratio;
          total_token_share_amount = received.token_share.amount;
       } else {
-         const int64_t E0 = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         const int64_t E1 = E0 + stake.amount;
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+         const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
+         const int64_t EP1 = EP0 + stake.amount;
          const int64_t TS0 = total_token_share_amount;
-         const int64_t TS1 = (uint128_t(E1) * TS0) / E0;
+         const int64_t TS1 = (uint128_t(EP1) * TS0) / EP0;
+
          received.token_share.amount = TS1 - TS0;
          total_token_share_amount = TS1;
       }
 
       total_staked_amount += stake.amount;
 
-      _stake_pool_db.modify( itr, same_payer, [&]( auto& sp ) {
+      _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
          sp.total_staked.amount       = total_staked_amount;
          sp.total_staked_share.amount = total_staked_share_amount;
          sp.total_token_share.amount  = total_token_share_amount;
@@ -431,7 +437,6 @@ namespace pieos {
     * @param token_share_received - amount of received SPIEOS tokens
     */
    void pieos_sco::add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received ) {
-
       const block_timestamp ct = current_block_time();
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
@@ -439,8 +444,9 @@ namespace pieos {
       if ( sa_itr == stake_accounts_db.end() ) {
          stake_accounts_db.emplace( owner, [&]( auto& sa ){
             sa.staked = stake;
-            sa.proxy_vote = asset( 0, EOS_SYMBOL );
             sa.staked_share = stake_share_received;
+            sa.proxy_vote = asset( 0, EOS_SYMBOL );
+            sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
             sa.token_share = token_share_received;
             sa.last_stake_time = ct;
          });
@@ -470,28 +476,27 @@ namespace pieos {
     */
    pieos_sco::unstake_outcome pieos_sco::unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr ) {
       stake_accounts stake_accounts_db( get_self(), owner.value );
-      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account not found" );
+      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account record not found" );
+
+      int64_t stake_account_staked_amount = sa_itr->staked.amount;
+      int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
+      const int64_t stake_account_proxy_vote_amount = sa_itr->proxy_vote.amount;
+      int64_t stake_account_token_share_amount = sa_itr->token_share.amount;
+
+      check( unstake_amount <= stake_account_staked_amount, "not enough staked balance" );
 
       time_point_sec ct_sec(current_time_point());
       time_point_sec rex_maturity_last_buyrex = get_rex_maturity(sa_itr->last_stake_time);
 
       check( ct_sec > rex_maturity_last_buyrex, "cannot run unstake until rex maturity time" );
 
-      int64_t stake_account_staked_amount = sa_itr->staked.amount;
-      int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
-      int64_t stake_account_token_share_amount = sa_itr->token_share.amount;
-
-      check( unstake_amount <= stake_account_staked_amount, "not enough staked balance" );
-
       int64_t total_staked_amount = sp_itr->total_staked.amount;
+      int64_t total_proxy_vote_amount = sp_itr->total_proxy_vote.amount;
       int64_t total_staked_share_amount = sp_itr->total_staked_share.amount;
       int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
       const int64_t staked_share_to_redeem = (uint128_t(unstake_amount) * stake_account_staked_share_amount) / stake_account_staked_amount;
-      const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / stake_account_staked_amount;
-
-      stake_account_staked_amount -= unstake_amount;
-      total_staked_amount -= unstake_amount;
+      const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100));
 
       unstake_outcome outcome { asset( 0, EOS_SYMBOL ), asset ( 0, PIEOS_SYMBOL ), asset( 0, REX_SYMBOL ) };
 
@@ -501,24 +506,40 @@ namespace pieos {
          asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
          asset total_eos_balance_for_staked = rex_eos_balance + eos_balance_for_stake_sco;
 
-         const int64_t eos_proceeds  = (uint128_t(staked_share_to_redeem) * total_eos_balance_for_staked.amount) / total_staked_share_amount;
+         const int64_t E0 = total_eos_balance_for_staked.amount;
+         const int64_t SS0 = total_staked_share_amount;
+         const int64_t eos_proceeds  = (uint128_t(staked_share_to_redeem) * E0) / SS0;
+         const int64_t SS1 = SS0 - staked_share_to_redeem;
+         //const int64_t E1 = E0 - eos_proceeds;
+
+         outcome.staked_and_profit_redeemed.amount = eos_proceeds;
+
          const int64_t rex_amount_to_sell = (uint128_t(staked_share_to_redeem) * rex_balance.amount) / total_staked_share_amount;
-         outcome.redeemed.amount = eos_proceeds;
          outcome.rex_to_sell.amount = rex_amount_to_sell;
 
          stake_account_staked_share_amount -= staked_share_to_redeem;
-         total_staked_share_amount -= staked_share_to_redeem;
+         total_staked_share_amount = SS1;
       }
 
       if ( token_share_to_redeem > 0 ) {
-         const asset unredeemed_sco_token_balance = get_token_balance( get_self(), PIEOS_SYMBOL );
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
 
-         int64_t redeemed_token_amount = uint128_t(unredeemed_sco_token_balance.amount) * token_share_to_redeem / total_token_share_amount;
+         const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
+         const int64_t TS0 = total_token_share_amount;
+         const int64_t p  = (uint128_t(token_share_to_redeem) * EP0) / TS0;
+         const int64_t redeemed_token_amount  = p - unstake_amount; // newly issued tokens since staked
+         const int64_t TS1 = TS0 - token_share_to_redeem;
+         //const int64_t EP1 = EP0 - p;
+
          outcome.token_earned.amount = redeemed_token_amount;
 
          stake_account_token_share_amount -= token_share_to_redeem;
-         total_token_share_amount -= token_share_to_redeem;
+         total_token_share_amount = TS1;
       }
+
+      stake_account_staked_amount -= unstake_amount;
+      total_staked_amount -= unstake_amount;
 
       _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
          sp.total_staked.amount       = total_staked_amount;
@@ -529,7 +550,7 @@ namespace pieos {
       if ( stake_account_staked_amount == 0
            && stake_account_staked_share_amount == 0
            && stake_account_token_share_amount == 0
-           && sa_itr->proxy_vote.amount == 0 ) {
+           && sa_itr->proxy_vote.amount == 0 && sa_itr->proxy_vote_share.amount == 0 ) {
          stake_accounts_db.erase( sa_itr );
       } else {
          stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
@@ -543,58 +564,177 @@ namespace pieos {
    }
 
    /**
-    * @brief Updates stake pool balances upon proxy voting to PIEOS proxy account
+    * @brief update stake pool, stake account balances for proxy-voting staking event notified
+    * the proxy-voted account receives token shares(SPIEOS) and proxy-vote shares(SPROXY)
     *
-    * @param proxy_vote_delta - delta amount of proxy vote
-    *
-    * @return pool_update_by_proxy_vote
-    *   total_token_share : (SPIEOS) updated total token share balance
-    *   token_share_delta : (SPIEOS) calculated delta amount of SPIEOS tokens received or removed
+    * @param account - proxy-voted account
+    * @param stake_proxy_vote_amount - added proxy-voting amount
     */
-   pieos_sco::pool_update_by_proxy_vote pieos_sco::update_stake_pool_by_proxy_vote( const asset& proxy_vote_delta, const stake_pool_global::const_iterator& sp_itr ) {
-
+   void pieos_sco::stake_by_proxy_vote( const name& account, const int64_t stake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr ) {
       const int64_t share_ratio = 10000;
 
-      pool_update_by_proxy_vote result { asset( 0, TOKEN_SHARE_SYMBOL ), asset ( 0, TOKEN_SHARE_SYMBOL ) };
-
-      int64_t total_staked_amount = sp_itr->total_staked.amount;
+      const int64_t total_staked_amount = sp_itr->total_staked.amount;
       int64_t total_proxy_vote_amount = sp_itr->total_proxy_vote.amount;
+      int64_t total_proxy_vote_share_amount = sp_itr->total_proxy_vote_share.amount;
       int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
-      int64_t proxy_vote_delta_weighted = proxy_vote_delta.amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100;
+      const int64_t stake_proxy_vote_weighted = stake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100;
 
-      if (total_token_share_amount == 0) {
-         check(proxy_vote_delta_weighted > 0, "no token share to remove");
-         result.token_share_delta.amount = share_ratio * proxy_vote_delta_weighted;
-         total_token_share_amount = result.token_share_delta.amount;
+      int64_t received_token_share_amount = 0;
+      if ( total_token_share_amount == 0 ) {
+         received_token_share_amount = share_ratio * stake_proxy_vote_weighted;
+         total_token_share_amount = received_token_share_amount;
       } else {
-         const int64_t E0 = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         if ( proxy_vote_delta.amount > 0 ) {
-            // receive more token share
-            const int64_t E1 = E0 + proxy_vote_delta_weighted;
-            const int64_t TS0 = total_token_share_amount;
-            const int64_t TS1 = (uint128_t(E1) * TS0) / E0;
-            result.token_share_delta.amount = TS1 - TS0;
-            total_token_share_amount = TS1;
-         } else {
-            // remove token share
-            const int64_t TS0 = total_token_share_amount;
-            const int64_t removing_token_share  = (uint128_t(-proxy_vote_delta_weighted) * TS0) / E0;
-            const int64_t TS1 = TS0 - removing_token_share;
-            result.token_share_delta.amount = -removing_token_share;
-            total_token_share_amount = TS1;
-         }
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+
+         const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
+         const int64_t EP1 = EP0 + stake_proxy_vote_weighted;
+         const int64_t TS0 = total_token_share_amount;
+         const int64_t TS1 = (uint128_t(EP1) * TS0) / EP0;
+
+         received_token_share_amount = TS1 - TS0;
+         total_token_share_amount = TS1;
       }
 
-      result.total_token_share.amount = total_token_share_amount;
-      total_proxy_vote_amount += proxy_vote_delta.amount;
+      int64_t received_proxy_vote_share_amount = 0;
+      if ( total_proxy_vote_share_amount == 0 ) {
+         received_proxy_vote_share_amount = share_ratio * stake_proxy_vote_amount;
+         total_proxy_vote_share_amount = received_proxy_vote_share_amount;
+      } else {
+         const int64_t total_unredeemed_proxy_vote_profit_amount = get_token_balance( FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
+
+         const int64_t E0 = total_proxy_vote_amount + total_unredeemed_proxy_vote_profit_amount;
+         const int64_t E1 = E0 + stake_proxy_vote_amount;
+         const int64_t PVS0 = total_proxy_vote_share_amount;
+         const int64_t PVS1 = (uint128_t(E1) * PVS0) / E0;
+
+         received_proxy_vote_share_amount = PVS1 - PVS0;
+         total_proxy_vote_share_amount = PVS1;
+      }
+
+      total_proxy_vote_amount += stake_proxy_vote_amount;
 
       _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
          sp.total_proxy_vote.amount  = total_proxy_vote_amount;
+         sp.total_proxy_vote_share.amount  = total_proxy_vote_share_amount;
          sp.total_token_share.amount = total_token_share_amount;
       });
 
-      return result;
+      stake_accounts stake_accounts_db( get_self(), account.value );
+      auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
+
+      // update stake account balances
+      if ( sa_itr == stake_accounts_db.end() ) {
+         stake_accounts_db.emplace( get_self(), [&]( auto& sa ){
+            sa.staked = asset( 0, EOS_SYMBOL );
+            sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
+            sa.proxy_vote = asset( stake_proxy_vote_amount, EOS_SYMBOL );
+            sa.proxy_vote_share = asset( received_proxy_vote_share_amount, PROXY_VOTE_SHARE_SYMBOL );
+            sa.token_share = asset( received_token_share_amount, TOKEN_SHARE_SYMBOL );
+            sa.last_stake_time = block_timestamp(0);
+         });
+      } else {
+         stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
+            sa.proxy_vote.amount += stake_proxy_vote_amount;
+            sa.proxy_vote_share.amount = received_proxy_vote_share_amount;
+            sa.token_share.amount += received_token_share_amount;
+         });
+      }
+   }
+
+   /**
+    * @brief update stake pool, stake account balances for withdrawn proxy-voting (unstaking) event notified
+    * the proxy-voted account receives the earned PIEOS tokens(redeemed from SCO token shares(SPIEOS))
+    * and proxy-vote profits(EOS)(redeemed from account's proxy-vote shares(SPROXY))
+    *
+    * @param account - proxy-vote-withdrawn account
+    * @param unstake_proxy_vote_amount - withdrawn proxy-voting amount
+    * @return unstake_by_proxy_outcome
+    *    proxy_vote_profit_redeemed - symbol:(EOS,4), original staked EOS + staking profits
+    *    token_earned - symbol:(PIEOS, 4), received PIEOS token balance
+    */
+   pieos_sco::unstake_by_proxy_outcome pieos_sco::unstake_by_proxy_vote( const name& account, const int64_t unstake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr ) {
+      stake_accounts stake_accounts_db( get_self(), account.value );
+      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account record not found" );
+
+      const int64_t stake_account_staked_amount = sa_itr->staked.amount;
+      const int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
+      int64_t stake_account_proxy_vote_amount = sa_itr->proxy_vote.amount;
+      int64_t stake_account_proxy_vote_share_amount = sa_itr->proxy_vote_share.amount;
+      int64_t stake_account_token_share_amount = sa_itr->token_share.amount;
+
+      check( unstake_proxy_vote_amount <= stake_account_proxy_vote_amount, "not enough staked proxy vote balance" );
+
+      unstake_by_proxy_outcome outcome { asset( 0, EOS_SYMBOL ), asset ( 0, PIEOS_SYMBOL ) };
+
+      const int64_t total_staked_amount = sp_itr->total_staked.amount;
+      int64_t total_proxy_vote_amount = sp_itr->total_proxy_vote.amount;
+      int64_t total_proxy_vote_share_amount = sp_itr->total_proxy_vote_share.amount;
+      int64_t total_token_share_amount = sp_itr->total_token_share.amount;
+
+      const int64_t unstake_proxy_vote_weighted = unstake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100;
+
+      const int64_t token_share_to_redeem = (uint128_t(unstake_proxy_vote_weighted) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100));
+      const int64_t proxy_vote_share_to_redeem = (uint128_t(unstake_proxy_vote_amount) * stake_account_proxy_vote_share_amount) / stake_account_proxy_vote_amount;
+
+      if ( token_share_to_redeem > 0 ) {
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+
+         const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
+         const int64_t TS0 = total_token_share_amount;
+         const int64_t p  = (uint128_t(token_share_to_redeem) * EP0) / TS0;
+         const int64_t TS1 = TS0 - token_share_to_redeem;
+         //const int64_t EP1 = EP0 - p;
+
+         const int64_t redeemed_token_amount  = p - unstake_proxy_vote_weighted; // newly issued tokens since proxy-vote staked
+         outcome.token_earned.amount = redeemed_token_amount;
+
+         stake_account_token_share_amount -= token_share_to_redeem;
+         total_token_share_amount = TS1;
+      }
+
+      if ( proxy_vote_share_to_redeem > 0 ) {
+         const int64_t total_unredeemed_proxy_vote_profit_amount = get_token_balance( FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
+
+         const int64_t E0 = total_proxy_vote_amount + total_unredeemed_proxy_vote_profit_amount;
+         const int64_t PVS0 = total_proxy_vote_share_amount;
+         const int64_t p  = (uint128_t(proxy_vote_share_to_redeem) * E0) / PVS0;
+         const int64_t PVS1 = PVS0 - proxy_vote_share_to_redeem;
+         //const int64_t E1 = E0 - p;
+
+         const int64_t redeemed_proxy_vote_profit_amount = p - unstake_proxy_vote_amount; // newly added proxy-vote profits since proxy-vote staked
+         outcome.proxy_vote_profit_redeemed.amount = redeemed_proxy_vote_profit_amount;
+
+         stake_account_proxy_vote_share_amount -= proxy_vote_share_to_redeem;
+         total_proxy_vote_share_amount = PVS1;
+      }
+
+      stake_account_proxy_vote_amount -= unstake_proxy_vote_amount;
+      total_proxy_vote_amount -= unstake_proxy_vote_amount;
+
+      _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
+         sp.total_proxy_vote.amount        = total_proxy_vote_amount;
+         sp.total_proxy_vote_share.amount  = total_proxy_vote_share_amount;
+         sp.total_token_share.amount       = total_token_share_amount;
+      });
+
+      if ( stake_account_staked_amount == 0
+           && stake_account_staked_share_amount == 0
+           && stake_account_token_share_amount == 0
+           && stake_account_proxy_vote_amount == 0
+           && stake_account_proxy_vote_share_amount == 0 ) {
+         stake_accounts_db.erase( sa_itr );
+      } else {
+         stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
+            sa.proxy_vote.amount        = stake_account_proxy_vote_amount;
+            sa.proxy_vote_share.amount  = stake_account_proxy_vote_share_amount;
+            sa.token_share.amount       = stake_account_token_share_amount;
+         });
+      }
+
+      return outcome;
    }
 
    /**
@@ -609,7 +749,9 @@ namespace pieos {
       block_timestamp last_issue_block = sp_itr->last_issue_time;
       block_timestamp current_block = current_block_time();
 
-      if ( current_block.slot <= sco_start_block.slot || last_issue_block.slot >= sco_end_block.slot ) {
+      if ( current_block.slot == last_issue_block.slot
+           || current_block.slot <= sco_start_block.slot
+           || last_issue_block.slot >= sco_end_block.slot ) {
          return;
       }
 
@@ -625,10 +767,9 @@ namespace pieos {
       const int64_t total_sco_time_period = sco_end_block.slot - sco_start_block.slot;
       const int64_t token_issue_amount = (uint128_t(PIEOS_DIST_STAKE_COIN_OFFERING) * elapsed) / total_sco_time_period;
 
-      if (token_issue_amount > 0 ) {
+      if ( token_issue_amount > 0 ) {
          asset issued(token_issue_amount, PIEOS_SYMBOL );
-
-         add_token_balance( get_self(), issued, get_self() ); // add unclaimed PIEOS SCO token balance
+         add_token_balance( get_self(), issued, get_self() ); // add unredeemed(unclaimed) PIEOS SCO token balance
 
          token_issue_action token_issue_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
          token_issue_act.send(get_self(), issued, "PIEOS SCO" );

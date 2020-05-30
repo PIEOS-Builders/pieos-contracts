@@ -40,7 +40,7 @@ namespace pieos {
                           const string&  memo );
 
       /**
-       * @brief Initialize contract state.
+       * @brief [Admin] Initialize contract state.
        *
        * only the contract account owner can initialize.
        * Contract owner initializes the PIEOS SCO(Stake-Coin-Offering) contract state to activate the SCO contract services.
@@ -166,9 +166,10 @@ namespace pieos {
    private:
 
       static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("SEOS"), 4);
+      static constexpr symbol PROXY_VOTE_SHARE_SYMBOL = symbol(symbol_code("SPROXY"), 4);
       static constexpr symbol TOKEN_SHARE_SYMBOL = symbol(symbol_code("SPIEOS"), 4);
 
-      static constexpr uint32_t PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT = 25; // 25% of staking share
+      static constexpr int32_t PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT = 25; // weight 25% of EOS staking share
 
       static constexpr uint32_t SCO_START_TIMESTAMP = 1590969600; // June 1, 2020 12:00:00 AM (GMT)
       static constexpr uint32_t SCO_END_TIMESTAMP = 1622505600; // June 1, 2021 12:00:00 AM (GMT)
@@ -187,18 +188,23 @@ namespace pieos {
       // The admin account exists because the ownership of PIEOS SCO contract account will be resigned to EOS block producers
       static constexpr name PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT   = name("pieosadminac");
 
+      static constexpr int32_t EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN = 10; // 10% of EOS REX + BP voting profits
+
+
       /**
        * total_staked - symbol:(EOS,4), sum of the `staked` of every stake-account
-       * total_proxy_vote - symbol:(EOS,4), sum of the `proxy_vote` of every stake-account
        * total_staked_share - symbol:(SEOS,4), sum of the `staked_share` amount of every stake-account
+       * total_proxy_vote - symbol:(EOS,4), sum of the `proxy_vote` of every stake-account
+       * total_proxy_vote_share - symbol:(SPROXY,4), sum of the `proxy_vote_share` amount of every stake-account
        * total_token_share - symbol:(SPIEOS,4), sum of the `token_share` amount of every stake-account
        * last_total_issued - symbol:(PIEOS,4), total accumulated PIEOS token amount issued on this SCO contract until the `last_issue_time`
        * last_issue_time - last token issue block timestamp
        */
       struct [[eosio::table]] stake_pool {
          asset            total_staked;
-         asset            total_proxy_vote;
          asset            total_staked_share;
+         asset            total_proxy_vote;
+         asset            total_proxy_vote_share;
          asset            total_token_share;
          asset            last_total_issued;
          block_timestamp  last_issue_time;
@@ -211,15 +217,17 @@ namespace pieos {
 
       /**
        * staked - symbol:(EOS,4), current staked EOS token amount
-       * proxy_vote - symbol:(EOS,4), amount of proxy vote, the EOS amount staked through eosio.system for BP voting
        * staked_share - symbol:(SEOS,4), share of staked EOS token plus contract eos profit (EOSREX and BP voting rewards profit) currently held on this PIEOS SCO contract account
+       * proxy_vote - symbol:(EOS,4), amount of proxy vote, the EOS amount staked through eosio.system for BP voting
+       * proxy_vote_share - symbol:(SPROXY,4), share of proxy voting BP reward profit (EOS transferred from accounts having account-type as FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO)
        * token_share - symbol:(SPIEOS,4), share of newly-minted SCO token (PIEOS) balance held on this PIEOS SCO contract account
        * last_stake_time - last EOS stake block timestamp
        */
       struct [[eosio::table]] stake_account {
          asset            staked;
-         asset            proxy_vote;
          asset            staked_share;
+         asset            proxy_vote;
+         asset            proxy_vote_share;
          asset            token_share;
          block_timestamp  last_stake_time;
 
@@ -270,21 +278,23 @@ namespace pieos {
          asset token_share;
       };
 
-      share_received add_to_stake_pool( const asset& stake );
+      share_received add_to_stake_pool( const asset& stake, const stake_pool_global::const_iterator& sp_itr );
       void add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received );
 
       struct unstake_outcome {
-         asset redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
-         asset token_earned;  // symbol:(PIEOS, 4) - received PIEOS token balance
-         asset rex_to_sell; // symbol:(REX, 4)
+         asset staked_and_profit_redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
+         asset token_earned;                // symbol:(PIEOS, 4) - received PIEOS token balance
+         asset rex_to_sell;                 // symbol:(REX, 4)
       };
       unstake_outcome unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
 
-      struct pool_update_by_proxy_vote {
-         asset total_token_share;
-         asset token_share_delta;
+      void stake_by_proxy_vote( const name& account, const int64_t stake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr );
+
+      struct unstake_by_proxy_outcome {
+         asset proxy_vote_profit_redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
+         asset token_earned;                // symbol:(PIEOS, 4) - received PIEOS token balance
       };
-      pool_update_by_proxy_vote update_stake_pool_by_proxy_vote( const asset& proxy_vote_delta, const stake_pool_global::const_iterator& sp_itr );
+      unstake_by_proxy_outcome unstake_by_proxy_vote( const name& account, const int64_t unstake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr );
 
       void issue_accrued_SCO_token( const stake_pool_global::const_iterator& sp_itr );
    };
