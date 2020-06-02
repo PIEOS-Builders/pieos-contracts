@@ -2,12 +2,44 @@
 
 ---
 spec_version: "0.2.0"
-title: Initialize Contract State
-summary: 'Initialize the SCO contract state'
+title: [Admin] Initialize Contract State
+summary: '[Admin] Initialize the SCO contract state'
 icon: @ICON_BASE_URL@/@ADMIN_ICON_URI@
 ---
 
 Contract owner initializes the PIEOS SCO(Stake-Coin-Offering) contract state to activate the SCO contract services.
+
+
+
+<h1 class="contract">open</h1>
+
+---
+spec_version: "0.2.0"
+title: Open Stake Account
+summary: 'Open stake account and create a record of zero balances for {{nowrap owner}}'
+icon: @ICON_BASE_URL@/@TOKEN_ICON_URI@
+---
+
+{{ram_payer}} agrees to establish zero quantity balances for {{owner}} for the stake account record.
+
+{{ram_payer}} will be designated as the RAM payer of stake account record for {{owner}}. As a result, RAM will be deducted from {{ram_payer}}’s resources to create the necessary records.
+
+
+
+<h1 class="contract">close</h1>
+
+---
+spec_version: "0.2.0"
+title: Close Stake Account
+summary: 'Close {{nowrap owner}}’s zero balance stake account record'
+icon: @ICON_BASE_URL@/@TOKEN_ICON_URI@
+---
+
+{{owner}} agrees to close their zero quantity balances for the stake account record.
+
+RAM will be refunded to the RAM payer of the stake account record for {{owner}}.
+
+
 
 
 <h1 class="contract">stake</h1>

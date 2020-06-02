@@ -51,6 +51,28 @@ namespace pieos {
       void init();
 
       /**
+       * @brief Open Stake Account
+       *
+       * Allows `ram_payer` to create an staking account `owner` records with zero balances
+       *
+       * @param owner - the account to be created,
+       * @param ram_payer - the account that supports the cost of this action.
+       *
+       */
+      [[eosio::action]]
+      void open( const name& owner, const name& ram_payer );
+
+      /**
+       * @brief Close Stake Account
+       *
+       * This action is the opposite for open, it closes the account `owner` and delete all the 'owner'-related records
+       *
+       * @param owner - the owner account to execute the close action for,
+       */
+      [[eosio::action]]
+      void close( const name& owner );
+
+      /**
        * @brief Stake EOS tokens on PIEOS SCO(Stake-Coin-Offering) contract to earn PIEOS tokens
        *
        * {{owner}} stakes the EOS amount of {{}} from the deposited EOS fund on the PIEOS SCO(Stake-Coin-Offering) contract.
@@ -95,8 +117,8 @@ namespace pieos {
        * @pre Transaction must be signed by PIEOS proxy voting account
        */
       [[eosio::action]]
-      void proxyvoted( const name&   account,
-                       const asset&  proxy_vote );
+      void proxyvoted( const name&  account,
+                       const asset& proxy_vote );
 
       /**
        * @brief Withdraw EOS fund or PIEOS tokens from PIEOS SCO(Stake-Coin-Offering) Contract
@@ -171,8 +193,11 @@ namespace pieos {
 
       static constexpr int32_t PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT = 25; // weight 25% of EOS staking share
 
-      static constexpr uint32_t SCO_START_TIMESTAMP = 1590969600; // June 1, 2020 12:00:00 AM (GMT)
-      static constexpr uint32_t SCO_END_TIMESTAMP = 1622505600; // June 1, 2021 12:00:00 AM (GMT)
+      //static constexpr uint32_t SCO_START_TIMESTAMP = 1592179200; // June 15, 2020 12:00:00 AM (GMT)
+      //static constexpr uint32_t SCO_END_TIMESTAMP = 1623715200; // June 15, 2021 12:00:00 AM (GMT)
+
+      static constexpr uint32_t SCO_START_TIMESTAMP = 1591090800; // June 2, 2020 18:40:00 AM (GMT+09:00)
+      static constexpr uint32_t SCO_END_TIMESTAMP = 1591177200; // June 3, 2021 18:40:00 AM (GMT+09:00)
 
       static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING       = 128'000'000'0000ll;
       static constexpr int64_t PIEOS_DIST_STABILITY_FUND            = 18'000'000'0000ll;
@@ -234,7 +259,7 @@ namespace pieos {
          uint64_t primary_key() const { return token_share.symbol.code().raw(); }
       };
 
-      typedef eosio::multi_index< "staked"_n, stake_account > stake_accounts;
+      typedef eosio::multi_index< "stakeaccount"_n, stake_account > stake_accounts;
 
       /**
        * issued - symbol:(PIEOS,4)
