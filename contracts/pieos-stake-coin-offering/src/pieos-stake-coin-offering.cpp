@@ -13,25 +13,25 @@ namespace pieos {
      _stake_pool_db(get_self(), get_self().value) {
    }
 
-   // called when EOS token on eosio.token contract is transferred to this pieos-sco contract account
+   // called when EOS tokens on eosio.token contract are transferred to this pieos-sco contract account
    void pieos_sco::receive_token( const name &from, const name &to, const asset &quantity,
                                   const std::string &memo ) {
       if ( quantity.symbol != EOS_SYMBOL || from == _self || to != _self || quantity.amount <= 0 ) {
          return;
       }
 
-      if ( from == REX_FUND_ACCOUNT || is_account_type(from, FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO ) ) {
+      if ( from == REX_FUND_ACCOUNT || is_account_type( from, ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO ) ) {
          // add EOS token balance to internal account for EOS-staked SCO
-         add_token_balance( FOR_EOS_STAKED_SCO, quantity, get_self() );
-      } else if ( is_account_type(from, FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO ) ) {
+         add_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO, quantity, get_self() );
+      } else if ( is_account_type( from, ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO ) ) {
          // add EOS token balance to internal account for Proxy-Vote SCO
-         add_token_balance( FOR_PROXY_VOTE_SCO, quantity, get_self() );
+         add_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO, quantity, get_self() );
       } else if ( from == REX_RAM_FUND_ACCOUNT ) {
          // add EOS token balance to internal account for contract admin
-         add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, quantity, get_self() );
+         add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, quantity, get_self() );
       } else {
          // add EOS token balance to user account
-         add_token_balance( from, quantity, from );
+         add_on_contract_token_balance( from, quantity, from );
       }
    }
 
@@ -58,13 +58,12 @@ namespace pieos {
 
       check( is_account( owner ), "owner account does not exist" );
 
-      add_token_balance( owner, asset( 0, EOS_SYMBOL ), ram_payer );
-      add_token_balance( owner, asset( 0, PIEOS_SYMBOL ), ram_payer );
-
       stake_accounts stake_accounts_db( get_self(), owner.value );
-      auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
+      auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
       if ( sa_itr == stake_accounts_db.end() ) {
          stake_accounts_db.emplace( owner, [&]( auto& sa ){
+            sa.core_token_bal = asset( 0, EOS_SYMBOL );
+            sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
             sa.staked = asset( 0, EOS_SYMBOL );
             sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
             sa.proxy_vote = asset( 0, EOS_SYMBOL );
@@ -81,22 +80,12 @@ namespace pieos {
          check( has_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT ), "require owner or admin account auth." );
       }
 
-      token_balance_table token_balance_db( get_self(), owner.value );
-
-      auto core_token_balance_it = token_balance_db.find( EOS_SYMBOL.code().raw() );
-      check( core_token_balance_it != token_balance_db.end(), "no on-contract core token balance" );
-      check( core_token_balance_it->balance.amount == 0, "Cannot close because the core token balance is not zero." );
-      token_balance_db.erase( core_token_balance_it );
-
-      auto sco_token_balance_it = token_balance_db.find( PIEOS_SYMBOL.code().raw() );
-      check( sco_token_balance_it != token_balance_db.end(), "no on-contract SCO token balance" );
-      check( sco_token_balance_it->balance.amount == 0, "Cannot close because the SCO token balance is not zero." );
-      token_balance_db.erase( sco_token_balance_it );
-
       stake_accounts stake_accounts_db( get_self(), owner.value );
-      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account record not found" );
+      auto sa_itr = stake_accounts_db.require_find( PIEOS_SYMBOL.code().raw(), "stake account record not found (close)" );
 
-      check( sa_itr->staked.amount == 0
+      check( sa_itr->core_token_bal.amount == 0
+           && sa_itr->sco_token_bal.amount == 0
+           && sa_itr->staked.amount == 0
            && sa_itr->staked_share.amount == 0
            && sa_itr->proxy_vote.amount == 0 && sa_itr->proxy_vote_share.amount == 0
            && sa_itr->token_share.amount == 0, "stake account has non-zero balance(s)" );
@@ -114,7 +103,7 @@ namespace pieos {
       require_auth(owner);
 
       // subtract user's on-contract EOS balance which is being deposited to EOS REX fund.
-      sub_token_balance( owner, amount );
+      sub_on_contract_token_balance( owner, amount );
 
       auto sp_itr = _stake_pool_db.begin();
       // issue PIEOS accrued since last issuance time (send inline token issue action to PIEOS token contract)
@@ -150,8 +139,8 @@ namespace pieos {
 
       if ( unstake_outcome.token_earned.amount > 0 ) {
          // transfer received PIEOS balance ownership from contract to user
-         sub_token_balance( get_self(), unstake_outcome.token_earned );
-         add_token_balance( owner, unstake_outcome.token_earned, owner );
+         sub_on_contract_token_balance( get_self(), unstake_outcome.token_earned );
+         add_on_contract_token_balance( owner, unstake_outcome.token_earned, owner );
       }
 
       if ( unstake_outcome.staked_and_profit_redeemed.amount > 0 ) {
@@ -162,10 +151,10 @@ namespace pieos {
          const int64_t contract_profit = eos_staking_profit * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
          if ( contract_profit > 0 ) {
             redeemed_to_unstaker.amount -= contract_profit;
-            add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, EOS_SYMBOL ), get_self() );
+            add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, EOS_SYMBOL ), get_self() );
          }
          // add user's on-contract EOS balance
-         add_token_balance( owner, redeemed_to_unstaker, owner );
+         add_on_contract_token_balance( owner, redeemed_to_unstaker, owner );
       }
 
       if (unstake_outcome.rex_to_sell.amount > 0) {
@@ -190,7 +179,7 @@ namespace pieos {
       asset current_proxy_vote( 0, EOS_SYMBOL );
       {
          stake_accounts stake_accounts_db( get_self(), account.value );
-         auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
+         auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
          current_proxy_vote.amount = (sa_itr == stake_accounts_db.end()) ? 0 : sa_itr->proxy_vote.amount;
       }
 
@@ -208,8 +197,8 @@ namespace pieos {
 
          if ( unstake_by_proxy_outcome.token_earned.amount > 0 ) {
             // transfer received PIEOS balance ownership from contract to user
-            sub_token_balance( get_self(), unstake_by_proxy_outcome.token_earned );
-            add_token_balance( account, unstake_by_proxy_outcome.token_earned, get_self() );
+            sub_on_contract_token_balance( get_self(), unstake_by_proxy_outcome.token_earned );
+            add_on_contract_token_balance( account, unstake_by_proxy_outcome.token_earned, get_self() );
          }
 
          if ( unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount > 0 ) {
@@ -219,10 +208,10 @@ namespace pieos {
             const int64_t contract_profit = unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
             if ( contract_profit > 0 ) {
                redeemed_to_unstaker.amount -= contract_profit;
-               add_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, EOS_SYMBOL ), get_self() );
+               add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset(contract_profit, EOS_SYMBOL), get_self() );
             }
             // add user's on-contract EOS balance
-            add_token_balance( account, redeemed_to_unstaker, get_self() );
+            add_on_contract_token_balance( account, redeemed_to_unstaker, get_self() );
          }
       }
    }
@@ -236,7 +225,7 @@ namespace pieos {
       require_auth(owner);
 
       // adjust token balance on PIEOS contract
-      sub_token_balance( owner, amount );
+      sub_on_contract_token_balance( owner, amount );
 
       if ( amount.symbol == EOS_SYMBOL ) {
          asset contract_eos_balance = get_token_balance_from_contract( EOS_TOKEN_CONTRACT, get_self(), EOS_SYMBOL );
@@ -313,7 +302,7 @@ namespace pieos {
    }
 
    // [[eosio::action]]
-   void pieos_sco::setacctype( const name& account, const int64_t type ) {
+   void pieos_sco::setacctype( const name& account, const uint32_t type ) {
       require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
       set_account_type( account, type );
    }
@@ -335,76 +324,114 @@ namespace pieos {
 
    /////////////////////////////////////////////////////////////////////////
 
-   void pieos_sco::add_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
-      token_balance_table token_balance_db( get_self(), owner.value );
-      auto to = token_balance_db.find( value.symbol.code().raw() );
-      if ( to == token_balance_db.end() ) {
-         token_balance_db.emplace( ram_payer, [&]( auto& a ){
-            a.balance = value;
+   void pieos_sco::add_on_contract_token_balance(const name& owner, const asset& value, const name& ram_payer ) {
+      check( value.symbol == EOS_SYMBOL || value.symbol == PIEOS_SYMBOL, "not supported on-contract token symbol (add)" );
+
+      stake_accounts stake_accounts_db( get_self(), owner.value );
+      auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
+
+      if ( sa_itr == stake_accounts_db.end() ) {
+         stake_accounts_db.emplace( ram_payer, [&]( auto& sa ){
+            if ( value.symbol == EOS_SYMBOL ) {
+               sa.core_token_bal = value;
+            } else {
+               sa.core_token_bal = asset( 0, EOS_SYMBOL );
+            }
+            if ( value.symbol == PIEOS_SYMBOL ) {
+               sa.sco_token_bal = value;
+            } else {
+               sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
+            }
+            sa.staked = asset( 0, EOS_SYMBOL );
+            sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
+            sa.proxy_vote = asset( 0, EOS_SYMBOL );
+            sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
+            sa.token_share = asset( 0, TOKEN_SHARE_SYMBOL );
+            sa.last_stake_time = block_timestamp(0);
          });
       } else {
-         token_balance_db.modify( to, same_payer, [&]( auto& a ) {
-            a.balance += value;
+         stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
+            if ( value.symbol == EOS_SYMBOL ) {
+               sa.core_token_bal.amount += value.amount;
+            }
+            if ( value.symbol == PIEOS_SYMBOL ) {
+               sa.sco_token_bal.amount += value.amount;
+            }
          });
       }
    }
 
-   void pieos_sco::sub_token_balance( const name& owner, const asset& value ) {
-      token_balance_table token_balance_db( get_self(), owner.value );
-
-      const auto& from = token_balance_db.get( value.symbol.code().raw(), "no token balance object found" );
-      check( from.balance.amount >= value.amount, "overdrawn balance" );
-
-      token_balance_db.modify( from, owner, [&]( auto& a ) {
-         a.balance -= value;
-      });
+   void pieos_sco::sub_on_contract_token_balance(const name& owner, const asset& value ) {
+      stake_accounts stake_accounts_db( get_self(), owner.value );
+      const auto& sa = stake_accounts_db.get( PIEOS_SYMBOL.code().raw(), "stake account record not found while sub-token" );
+      if ( value.symbol == EOS_SYMBOL ) {
+         check( sa.core_token_bal.amount >= value.amount, "overdrawn core token balance" );
+         stake_accounts_db.modify( sa, same_payer, [&]( auto& a ) {
+            a.core_token_bal -= value;
+         });
+      } else if ( value.symbol == PIEOS_SYMBOL ) {
+         check( sa.sco_token_bal.amount >= value.amount, "overdrawn sco token balance" );
+         stake_accounts_db.modify( sa, same_payer, [&]( auto& a ) {
+            a.sco_token_bal -= value;
+         });
+      } else {
+         check( false, "not supported on-contract token symbol (sub)" );
+      }
    }
 
-   asset pieos_sco::get_token_balance( const name& account, const symbol& symbol ) const {
-      token_balance_table token_balance_db(get_self(), account.value);
-      auto itr = token_balance_db.find(symbol.code().raw());
-      if ( itr == token_balance_db.end() ) {
+   asset pieos_sco::get_on_contract_token_balance(const name& account, const symbol& symbol ) const {
+      check( symbol == EOS_SYMBOL || symbol == PIEOS_SYMBOL, "not supported on-contract token symbol (get)" );
+
+      stake_accounts stake_accounts_db( get_self(), account.value );
+      auto itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
+      if ( itr == stake_accounts_db.end() ) {
          return asset( 0, symbol );
       }
-      return itr->balance;
+
+      if ( symbol == EOS_SYMBOL ) {
+         return itr->core_token_bal;
+      } else {
+         // symbol == PIEOS_SYMBOL
+         return itr->sco_token_bal;
+      }
    }
 
-   void pieos_sco::set_account_type( const name& account, const int64_t type_flag ) {
-      token_balance_table token_balance_db( get_self(), account.value );
-      auto itr = token_balance_db.find( 0 );
-      if ( itr == token_balance_db.end() ) {
-         if ( type_flag != FLAG_NORMAL_USER_ACCOUNT ) {
-            token_balance_db.emplace( get_self(), [&]( auto& a ){
-               a.balance = asset( type_flag, symbol(0) );
+   void pieos_sco::set_account_type( const name& account, const uint32_t account_type ) {
+      account_type_table account_type_db( get_self(), account.value );
+      auto itr = account_type_db.find( 0 );
+      if ( itr == account_type_db.end() ) {
+         if (account_type != ACCOUNT_TYPE_NORMAL_USER_ACCOUNT ) {
+            account_type_db.emplace( get_self(), [&]( auto& at ){
+               at.acc_type = account_type;
             });
          }
       } else {
-         if ( type_flag == FLAG_NORMAL_USER_ACCOUNT ) {
-            token_balance_db.erase(itr);
+         if (account_type == ACCOUNT_TYPE_NORMAL_USER_ACCOUNT ) {
+            account_type_db.erase(itr);
          } else {
-            token_balance_db.modify( itr, same_payer, [&]( auto& a ) {
-               a.balance = asset( type_flag, symbol(0) );
+            account_type_db.modify( itr, same_payer, [&]( auto& a ) {
+               a.acc_type = account_type;
             });
          }
       }
    }
 
-   bool pieos_sco::is_account_type( const name& account, const int64_t type_flag ) const {
-      token_balance_table token_balance_db(get_self(), account.value);
-      auto itr = token_balance_db.find(0);
-      if ( itr == token_balance_db.end() ) {
-         return type_flag == FLAG_NORMAL_USER_ACCOUNT;
+   bool pieos_sco::is_account_type( const name& account, const uint32_t account_type ) const {
+      account_type_table account_type_db(get_self(), account.value);
+      auto itr = account_type_db.find(0);
+      if ( itr == account_type_db.end() ) {
+         return account_type == ACCOUNT_TYPE_NORMAL_USER_ACCOUNT;
       }
-      return itr->balance.amount == type_flag;
+      return itr->acc_type == account_type;
    }
 
    void pieos_sco::check_staking_allowed_account( const name& account ) const {
-      check( is_account_type(account, FLAG_NORMAL_USER_ACCOUNT) && account != get_self() && account != FOR_EOS_STAKED_SCO && account != FOR_PROXY_VOTE_SCO, "staking not allowed for this account" );
+      check(is_account_type(account, ACCOUNT_TYPE_NORMAL_USER_ACCOUNT) && account != get_self() && account != INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO && account != INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO, "staking not allowed for this account" );
    }
 
    asset pieos_sco::get_total_eos_amount_for_staked() const {
       asset total_rex_to_eos_balance = get_total_rex_to_eos_balance( get_self() );
-      asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
+      asset eos_balance_for_stake_sco = get_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO, EOS_SYMBOL );
       asset total_eos_balance_for_staked = total_rex_to_eos_balance + eos_balance_for_stake_sco;
       return total_eos_balance_for_staked;
    }
@@ -452,7 +479,7 @@ namespace pieos {
          total_token_share_amount = received.token_share.amount;
       } else {
          const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_sco_token_amount = get_on_contract_token_balance( get_self(), PIEOS_SYMBOL ).amount;
          const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
          const int64_t EP1 = EP0 + stake.amount;
          const int64_t TS0 = total_token_share_amount;
@@ -485,24 +512,13 @@ namespace pieos {
       const block_timestamp ct = current_block_time();
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
-      auto sa_itr = stake_accounts_db.find( token_share_received.symbol.code().raw() );
-      if ( sa_itr == stake_accounts_db.end() ) {
-         stake_accounts_db.emplace( owner, [&]( auto& sa ){
-            sa.staked = stake;
-            sa.staked_share = stake_share_received;
-            sa.proxy_vote = asset( 0, EOS_SYMBOL );
-            sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
-            sa.token_share = token_share_received;
-            sa.last_stake_time = ct;
-         });
-      } else {
-         stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
-            sa.staked.amount += stake.amount;
-            sa.staked_share.amount += stake_share_received.amount;
-            sa.token_share.amount += token_share_received.amount;
-            sa.last_stake_time = ct;
-         });
-      }
+      auto sa_itr = stake_accounts_db.require_find( PIEOS_SYMBOL.code().raw(), "stake account record not found (add to stake balance)" );
+      stake_accounts_db.modify( sa_itr, same_payer, [&]( auto& sa ) {
+         sa.staked.amount += stake.amount;
+         sa.staked_share.amount += stake_share_received.amount;
+         sa.token_share.amount += token_share_received.amount;
+         sa.last_stake_time = ct;
+      });
    }
 
    /**
@@ -521,7 +537,7 @@ namespace pieos {
     */
    pieos_sco::unstake_outcome pieos_sco::unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr ) {
       stake_accounts stake_accounts_db( get_self(), owner.value );
-      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account record not found" );
+      auto sa_itr = stake_accounts_db.require_find( PIEOS_SYMBOL.code().raw(), "stake account record not found (unstake from stake pool)" );
 
       int64_t stake_account_staked_amount = sa_itr->staked.amount;
       int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
@@ -548,7 +564,7 @@ namespace pieos {
       if ( staked_share_to_redeem > 0 ) {
          asset rex_balance = get_rex_balance( get_self() );
          asset rex_eos_balance = rex_to_eos_balance( rex_balance );
-         asset eos_balance_for_stake_sco = get_token_balance( FOR_EOS_STAKED_SCO, EOS_SYMBOL );
+         asset eos_balance_for_stake_sco = get_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO, EOS_SYMBOL );
          asset total_eos_balance_for_staked = rex_eos_balance + eos_balance_for_stake_sco;
 
          const int64_t E0 = total_eos_balance_for_staked.amount;
@@ -568,7 +584,7 @@ namespace pieos {
 
       if ( token_share_to_redeem > 0 ) {
          const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_sco_token_amount = get_on_contract_token_balance( get_self(), PIEOS_SYMBOL ).amount;
 
          const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
          const int64_t TS0 = total_token_share_amount;
@@ -624,7 +640,7 @@ namespace pieos {
          total_token_share_amount = received_token_share_amount;
       } else {
          const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_sco_token_amount = get_on_contract_token_balance( get_self(), PIEOS_SYMBOL ).amount;
 
          const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
          const int64_t EP1 = EP0 + stake_proxy_vote_weighted;
@@ -640,7 +656,7 @@ namespace pieos {
          received_proxy_vote_share_amount = share_ratio * stake_proxy_vote_amount;
          total_proxy_vote_share_amount = received_proxy_vote_share_amount;
       } else {
-         const int64_t total_unredeemed_proxy_vote_profit_amount = get_token_balance( FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_proxy_vote_profit_amount = get_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
 
          const int64_t E0 = total_proxy_vote_amount + total_unredeemed_proxy_vote_profit_amount;
          const int64_t E1 = E0 + stake_proxy_vote_amount;
@@ -660,11 +676,13 @@ namespace pieos {
       });
 
       stake_accounts stake_accounts_db( get_self(), account.value );
-      auto sa_itr = stake_accounts_db.find( TOKEN_SHARE_SYMBOL.code().raw() );
+      auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
 
       // update stake account balances
       if ( sa_itr == stake_accounts_db.end() ) {
          stake_accounts_db.emplace( get_self(), [&]( auto& sa ){
+            sa.core_token_bal = asset( 0, EOS_SYMBOL );
+            sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
             sa.staked = asset( 0, EOS_SYMBOL );
             sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
             sa.proxy_vote = asset( stake_proxy_vote_amount, EOS_SYMBOL );
@@ -694,7 +712,7 @@ namespace pieos {
     */
    pieos_sco::unstake_by_proxy_outcome pieos_sco::unstake_by_proxy_vote( const name& account, const int64_t unstake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr ) {
       stake_accounts stake_accounts_db( get_self(), account.value );
-      auto sa_itr = stake_accounts_db.require_find( TOKEN_SHARE_SYMBOL.code().raw(), "stake account record not found" );
+      auto sa_itr = stake_accounts_db.require_find( PIEOS_SYMBOL.code().raw(), "stake account record not found (unstake by proxy vote)" );
 
       const int64_t stake_account_staked_amount = sa_itr->staked.amount;
       const int64_t stake_account_staked_share_amount = sa_itr->staked_share.amount;
@@ -718,7 +736,7 @@ namespace pieos {
 
       if ( token_share_to_redeem > 0 ) {
          const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
-         const int64_t total_unredeemed_sco_token_amount = get_token_balance( get_self(), PIEOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_sco_token_amount = get_on_contract_token_balance( get_self(), PIEOS_SYMBOL ).amount;
 
          const int64_t EP0 = total_weighted_staking_amount + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
          const int64_t TS0 = total_token_share_amount;
@@ -734,7 +752,7 @@ namespace pieos {
       }
 
       if ( proxy_vote_share_to_redeem > 0 ) {
-         const int64_t total_unredeemed_proxy_vote_profit_amount = get_token_balance( FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
+         const int64_t total_unredeemed_proxy_vote_profit_amount = get_on_contract_token_balance( INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO, EOS_SYMBOL ).amount;
 
          const int64_t E0 = total_proxy_vote_amount + total_unredeemed_proxy_vote_profit_amount;
          const int64_t PVS0 = total_proxy_vote_share_amount;
@@ -799,7 +817,7 @@ namespace pieos {
 
       if ( token_issue_amount > 0 ) {
          asset issued(token_issue_amount, PIEOS_SYMBOL );
-         add_token_balance( get_self(), issued, get_self() ); // add unredeemed(unclaimed) PIEOS SCO token balance
+         add_on_contract_token_balance( get_self(), issued, get_self() ); // add unredeemed(unclaimed) PIEOS SCO token balance
 
          token_issue_action token_issue_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
          token_issue_act.send(get_self(), issued, "PIEOS SCO" );

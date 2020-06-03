@@ -157,11 +157,11 @@ namespace pieos {
        *
        * The PIEOS SCO contract admin account sets a account type for an account {{account}}
        *
-       * @param account
-       * @param type
+       * @param account - account name
+       * @param type - account type flag
        */
       [[eosio::action]]
-      void setacctype( const name& account, const int64_t type );
+      void setacctype( const name& account, const uint32_t type );
 
       /**
        * @brief [Admin] Sell RAM
@@ -241,14 +241,18 @@ namespace pieos {
       stake_pool_global _stake_pool_db;
 
       /**
+       * core_token_bal - symbol:(EOS,4), on-contract EOS token balance, which can be withdrawn from contract account
+       * sco_token_bal - symbol:(PIEOS,4), on-contract received PIEOS token balance, which can be withdrawn from contract account
        * staked - symbol:(EOS,4), current staked EOS token amount
        * staked_share - symbol:(SEOS,4), share of staked EOS token plus contract eos profit (EOSREX and BP voting rewards profit) currently held on this PIEOS SCO contract account
        * proxy_vote - symbol:(EOS,4), amount of proxy vote, the EOS amount staked through eosio.system for BP voting
-       * proxy_vote_share - symbol:(SPROXY,4), share of proxy voting BP reward profit (EOS transferred from accounts having account-type as FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO)
+       * proxy_vote_share - symbol:(SPROXY,4), share of proxy voting BP reward profit (EOS transferred from accounts having account-type as ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO)
        * token_share - symbol:(SPIEOS,4), share of newly-minted SCO token (PIEOS) balance held on this PIEOS SCO contract account
        * last_stake_time - last EOS stake block timestamp
        */
       struct [[eosio::table]] stake_account {
+         asset            core_token_bal;
+         asset            sco_token_bal;
          asset            staked;
          asset            staked_share;
          asset            proxy_vote;
@@ -272,27 +276,27 @@ namespace pieos {
       typedef eosio::multi_index< "reserved"_n, reserved_vesting > reserved_vesting_accounts;
 
 
-      struct [[eosio::table]] token_balance {
-         asset    balance;
+      struct [[eosio::table]] account_type {
+         uint32_t acc_type;
 
-         uint64_t primary_key()const { return balance.symbol.code().raw(); }
+         uint64_t primary_key()const { return 0; }
       };
 
-      typedef eosio::multi_index< "tokenbal"_n, token_balance > token_balance_table;
+      typedef eosio::multi_index< "acctype"_n, account_type > account_type_table;
 
-      static constexpr name FOR_EOS_STAKED_SCO = name("stake.pieos");
-      static constexpr name FOR_PROXY_VOTE_SCO = name("proxy.pieos");
+      static constexpr name INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO = name("stake.pieos");
+      static constexpr name INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO = name("proxy.pieos");
 
-      static constexpr int64_t FLAG_NORMAL_USER_ACCOUNT = -1;
-      static constexpr int64_t FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO = -2;
-      static constexpr int64_t FLAG_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO = -3;
+      static constexpr uint32_t ACCOUNT_TYPE_NORMAL_USER_ACCOUNT = 0;
+      static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO = 1;
+      static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO = 2;
 
-      void add_token_balance( const name& owner, const asset& value, const name& ram_payer );
-      void sub_token_balance( const name& owner, const asset& value );
-      asset get_token_balance( const name& account, const symbol& symbol ) const;
+      void add_on_contract_token_balance(const name& owner, const asset& value, const name& ram_payer );
+      void sub_on_contract_token_balance(const name& owner, const asset& value );
+      asset get_on_contract_token_balance(const name& account, const symbol& symbol ) const;
 
-      void set_account_type( const name& account, const int64_t type_flag );
-      bool is_account_type( const name& account, const int64_t type_flag ) const;
+      void set_account_type( const name& account, const uint32_t account_type );
+      bool is_account_type( const name& account, const uint32_t account_type ) const;
       void check_staking_allowed_account( const name& account ) const;
 
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
