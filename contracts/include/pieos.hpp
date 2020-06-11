@@ -9,10 +9,10 @@
 #define EOS_SYSTEM_CONTRACT "eosio"_n
 #define EOS_TOKEN_CONTRACT "eosio.token"_n
 
-// #define EOS_SYMBOL_STR "EOS"
-#define EOS_SYMBOL_STR "SYS"
-#define EOS_SYMBOL_DECIMAL 4
-#define EOS_SYMBOL eosio::symbol(EOS_SYMBOL_STR,EOS_SYMBOL_DECIMAL)
+// #define CORE_TOKEN_SYMBOL_STR "EOS"
+#define CORE_TOKEN_SYMBOL_STR "SYS"
+#define CORE_TOKEN_SYMBOL_DECIMAL 4
+#define CORE_TOKEN_SYMBOL eosio::symbol(CORE_TOKEN_SYMBOL_STR,CORE_TOKEN_SYMBOL_DECIMAL)
 
 #define REX_FUND_ACCOUNT "eosio.rex"_n
 #define REX_RAM_FUND_ACCOUNT "eosio.ram"_n

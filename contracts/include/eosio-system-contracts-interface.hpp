@@ -214,26 +214,26 @@ namespace pieos::eosiosystem {
       return rb_itr->rex_balance;
    }
 
-   asset rex_to_eos_balance( const asset& rex_balance ) {
+   asset rex_to_core_token_balance( const asset& rex_balance ) {
       rex_pool_table rex_pool( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
       auto rp_itr = rex_pool.begin();
       if ( rp_itr == rex_pool.end() ) {
-         return asset( 0, EOS_SYMBOL );
+         return asset( 0, CORE_TOKEN_SYMBOL );
       }
 
       const int64_t S0 = rp_itr->total_lendable.amount;
       const int64_t R0 = rp_itr->total_rex.amount;
       const int64_t eos_balance = (uint128_t(rex_balance.amount) * S0) / R0;
-      return asset( eos_balance, EOS_SYMBOL );
+      return asset( eos_balance, CORE_TOKEN_SYMBOL );
    }
 
-   asset get_total_rex_to_eos_balance( const name& account ) {
+   asset get_total_rex_to_core_token_balance( const name& account ) {
       asset account_rex_balance = get_rex_balance( account );
       if ( account_rex_balance.amount <= 0 ) {
-         return asset( 0, EOS_SYMBOL );
+         return asset( 0, CORE_TOKEN_SYMBOL );
       }
 
-      return rex_to_eos_balance(account_rex_balance);
+      return rex_to_core_token_balance(account_rex_balance);
    }
 
    static constexpr uint32_t seconds_per_day = 24 * 3600;

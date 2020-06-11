@@ -303,7 +303,7 @@ namespace pieos {
       void check_staking_allowed_account( const name& account ) const;
 
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
-      asset get_total_eos_amount_for_staked( const stake_pool_global::const_iterator& sp_itr ) const;
+      asset get_total_core_token_amount_for_staked( const stake_pool_global::const_iterator& sp_itr ) const;
 
       struct share_received {
          asset staked_share;
