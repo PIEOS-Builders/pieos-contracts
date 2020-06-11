@@ -219,18 +219,24 @@ namespace pieos {
       /**
        * total_staked - symbol:(EOS,4), sum of the `staked` of every stake-account
        * total_staked_share - symbol:(SEOS,4), sum of the `staked_share` amount of every stake-account
+       * core_token_for_staked - symbol:(EOS, 4), EOS balance of BP voting reward profits for SCO-staked accounts
        * total_proxy_vote - symbol:(EOS,4), sum of the `proxy_vote` of every stake-account
        * total_proxy_vote_share - symbol:(SPROXY,4), sum of the `proxy_vote_share` amount of every stake-account
+       * core_token_for_proxy_vote - symbol:(EOS, 4), EOS balance of proxy BP voting reward profits for proxy-vote staking accounts
        * total_token_share - symbol:(SPIEOS,4), sum of the `token_share` amount of every stake-account
+       * sco_token_unredeemed - symbol:(PIEOS,4), current unredeemed PIEOS token balance
        * last_total_issued - symbol:(PIEOS,4), total accumulated PIEOS token amount issued on this SCO contract until the `last_issue_time`
        * last_issue_time - last token issue block timestamp
        */
       struct [[eosio::table]] stake_pool {
          asset            total_staked;
          asset            total_staked_share;
+         asset            core_token_for_staked;
          asset            total_proxy_vote;
          asset            total_proxy_vote_share;
+         asset            core_token_for_proxy_vote;
          asset            total_token_share;
+         asset            sco_token_unredeemed;
          asset            last_total_issued;
          block_timestamp  last_issue_time;
 
@@ -284,23 +290,20 @@ namespace pieos {
 
       typedef eosio::multi_index< "acctype"_n, account_type > account_type_table;
 
-      static constexpr name INTERNAL_ACCOUNT_FOR_EOS_STAKED_SCO = name("stake.pieos");
-      static constexpr name INTERNAL_ACCOUNT_FOR_PROXY_VOTE_SCO = name("proxy.pieos");
-
       static constexpr uint32_t ACCOUNT_TYPE_NORMAL_USER_ACCOUNT = 0;
       static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO = 1;
       static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO = 2;
 
       void add_on_contract_token_balance(const name& owner, const asset& value, const name& ram_payer );
       void sub_on_contract_token_balance(const name& owner, const asset& value );
-      asset get_on_contract_token_balance(const name& account, const symbol& symbol ) const;
+      //asset get_on_contract_token_balance(const name& account, const symbol& symbol ) const;
 
       void set_account_type( const name& account, const uint32_t account_type );
       bool is_account_type( const name& account, const uint32_t account_type ) const;
       void check_staking_allowed_account( const name& account ) const;
 
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
-      asset get_total_eos_amount_for_staked() const;
+      asset get_total_eos_amount_for_staked( const stake_pool_global::const_iterator& sp_itr ) const;
 
       struct share_received {
          asset staked_share;

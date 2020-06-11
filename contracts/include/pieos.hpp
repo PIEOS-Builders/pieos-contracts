@@ -9,7 +9,8 @@
 #define EOS_SYSTEM_CONTRACT "eosio"_n
 #define EOS_TOKEN_CONTRACT "eosio.token"_n
 
-#define EOS_SYMBOL_STR "EOS"
+// #define EOS_SYMBOL_STR "EOS"
+#define EOS_SYMBOL_STR "SYS"
 #define EOS_SYMBOL_DECIMAL 4
 #define EOS_SYMBOL eosio::symbol(EOS_SYMBOL_STR,EOS_SYMBOL_DECIMAL)
 
@@ -33,7 +34,7 @@
 ///////////////////////////////////
 /// PIEOS SCO(Stake-Coin-Offering) Governance Token Distribution
 
-#define PIEOS_SCO_CONTRACT "pieosscodist"_n
+#define PIEOS_SCO_CONTRACT "pieosdistsco"_n
 
 
 ///////////////////////////////////
