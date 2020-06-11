@@ -6,8 +6,8 @@
 ///////////////////////////////////
 /// EOS Native
 
-#define EOS_SYSTEM_CONTRACT "eosio"_n
-#define EOS_TOKEN_CONTRACT "eosio.token"_n
+#define EOSIO_SYSTEM_CONTRACT "eosio"_n
+#define EOSIO_TOKEN_CONTRACT "eosio.token"_n
 
 // #define CORE_TOKEN_SYMBOL_STR "EOS"
 #define CORE_TOKEN_SYMBOL_STR "SYS"

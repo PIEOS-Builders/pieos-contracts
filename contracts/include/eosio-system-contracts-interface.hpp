@@ -206,7 +206,7 @@ namespace pieos::eosiosystem {
    using eosio_system_voteproducer_action = eosio::action_wrapper<"voteproducer"_n, &system_contract_action_interface::voteproducer>;
 
    asset get_rex_balance( const name& account ) {
-      rex_balance_table rex_balances( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
+      rex_balance_table rex_balances( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
       auto rb_itr = rex_balances.find( account.value );
       if ( rb_itr == rex_balances.end() ) {
          return asset( 0, REX_SYMBOL );
@@ -215,7 +215,7 @@ namespace pieos::eosiosystem {
    }
 
    asset rex_to_core_token_balance( const asset& rex_balance ) {
-      rex_pool_table rex_pool( EOS_SYSTEM_CONTRACT, EOS_SYSTEM_CONTRACT.value );
+      rex_pool_table rex_pool( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
       auto rp_itr = rex_pool.begin();
       if ( rp_itr == rex_pool.end() ) {
          return asset( 0, CORE_TOKEN_SYMBOL );

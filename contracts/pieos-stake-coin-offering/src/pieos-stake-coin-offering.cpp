@@ -124,10 +124,10 @@ namespace pieos {
       add_to_stake_balance( owner, amount, received.staked_share, received.token_share );
 
       // (inline actions) deposit rex-fund and buy rex from system contract to earn rex staking profit
-      eosio_system_deposit_action deposit_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      eosio_system_deposit_action deposit_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       deposit_act.send( get_self(), amount );
 
-      eosio_system_buyrex_action buyrex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      eosio_system_buyrex_action buyrex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       buyrex_act.send( get_self(), amount );
    }
 
@@ -169,7 +169,7 @@ namespace pieos {
 
       if (unstake_outcome.rex_to_sell.amount > 0) {
          // (inline action) sell rex to receive EOS
-         eosio_system_sellrex_action sellrex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+         eosio_system_sellrex_action sellrex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
          sellrex_act.send( get_self(), amount );
       }
    }
@@ -237,10 +237,10 @@ namespace pieos {
       sub_on_contract_token_balance( owner, amount );
 
       if ( amount.symbol == CORE_TOKEN_SYMBOL ) {
-         asset contract_core_token_balance = get_token_balance_from_contract(EOS_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
+         asset contract_core_token_balance = get_token_balance_from_contract(EOSIO_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
          check(amount <= contract_core_token_balance, "not enough SCO contract's EOS balance because of pending REX sell orders" );
 
-         token_transfer_action transfer_act{ EOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+         token_transfer_action transfer_act{ EOSIO_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
          transfer_act.send( get_self(), owner, amount, "PIEOS SCO" );
       } else if ( amount.symbol == PIEOS_SYMBOL ) {
          token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n }, { owner, "active"_n } } }; // ram_payer : `owner` account
@@ -306,7 +306,7 @@ namespace pieos {
    // [[eosio::action]]
    void pieos_sco::updaterex( const name& updater ) {
       require_auth( updater );
-      eosio_system_updaterex_action updaterex_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      eosio_system_updaterex_action updaterex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       updaterex_act.send( get_self() );
    }
 
@@ -319,14 +319,14 @@ namespace pieos {
    // [[eosio::action]]
    void pieos_sco::sellram( const int64_t bytes ) {
       require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
-      eosio_system_sellram_action sellram_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      eosio_system_sellram_action sellram_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       sellram_act.send( get_self(), bytes );
    }
 
    // [[eosio::action]]
    void pieos_sco::voteproducer( const name& proxy, const std::vector<name>& producers ) {
       require_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT );
-      eosio_system_voteproducer_action voteproducer_act{ EOS_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+      eosio_system_voteproducer_action voteproducer_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
       voteproducer_act.send( get_self(), proxy, producers );
    }
 
@@ -847,7 +847,7 @@ namespace pieos {
 
 extern "C" {
    void apply(uint64_t receiver, uint64_t code, uint64_t action) {
-      if ( code == EOS_TOKEN_CONTRACT.value && action == "transfer"_n.value ) {
+      if ( code == EOSIO_TOKEN_CONTRACT.value && action == "transfer"_n.value ) {
          eosio::execute_action( name(receiver), name(code), &pieos::pieos_sco::receive_token );
       }
       if ( code == receiver ) {
