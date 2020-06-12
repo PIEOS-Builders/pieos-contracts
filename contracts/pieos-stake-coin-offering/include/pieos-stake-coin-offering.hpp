@@ -305,26 +305,20 @@ namespace pieos {
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
       asset get_total_core_token_amount_for_staked( const stake_pool_global::const_iterator& sp_itr ) const;
 
-      struct share_received {
-         asset staked_share;
-         asset token_share;
-      };
+      void stake_core_token( const name& owner, const asset& stake, const stake_pool_global::const_iterator& sp_itr );
 
-      share_received add_to_stake_pool( const asset& stake, const stake_pool_global::const_iterator& sp_itr );
-      void add_to_stake_balance( const name& owner, const asset& stake, const asset& stake_share_received, const asset& token_share_received );
-
-      struct unstake_outcome {
+      struct unstake_core_token_outcome {
          asset staked_and_profit_redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
-         asset token_earned;                // symbol:(PIEOS, 4) - received PIEOS token balance
-         asset rex_to_sell;                 // symbol:(REX, 4)
+         asset token_earned;                // symbol:(PIEOS,4) - received PIEOS token balance
+         asset rex_to_sell;                 // symbol:(REX,4) - REX amount to sell
       };
-      unstake_outcome unstake_from_stake_pool( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
+      unstake_core_token_outcome unstake_core_token( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
 
       void stake_by_proxy_vote( const name& account, const int64_t stake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr );
 
       struct unstake_by_proxy_outcome {
          asset proxy_vote_profit_redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
-         asset token_earned;                // symbol:(PIEOS, 4) - received PIEOS token balance
+         asset token_earned;                // symbol:(PIEOS,4) - received PIEOS token balance
       };
       unstake_by_proxy_outcome unstake_by_proxy_vote( const name& account, const int64_t unstake_proxy_vote_amount, const stake_pool_global::const_iterator& sp_itr );
 
