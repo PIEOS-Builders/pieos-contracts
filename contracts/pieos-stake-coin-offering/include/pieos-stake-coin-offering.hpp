@@ -187,17 +187,17 @@ namespace pieos {
 
    private:
 
-      static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("SEOS"), 4);
+      static constexpr symbol STAKED_SHARE_SYMBOL = symbol(symbol_code("S" CORE_TOKEN_SYMBOL_STR ), 4);
       static constexpr symbol PROXY_VOTE_SHARE_SYMBOL = symbol(symbol_code("SPROXY"), 4);
-      static constexpr symbol TOKEN_SHARE_SYMBOL = symbol(symbol_code("SPIEOS"), 4);
+      static constexpr symbol TOKEN_SHARE_SYMBOL = symbol(symbol_code("S" PIEOS_SYMBOL_STR ), 4);
 
       static constexpr int32_t PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT = 25; // weight 25% of EOS staking share
 
-      //static constexpr uint32_t SCO_START_TIMESTAMP = 1592179200; // June 15, 2020 12:00:00 AM (GMT)
-      //static constexpr uint32_t SCO_END_TIMESTAMP = 1623715200; // June 15, 2021 12:00:00 AM (GMT)
+      //static constexpr uint32_t SCO_START_TIMESTAMP = 1593561600; // July 1, 2020 12:00:00 AM (GMT)
+      //static constexpr uint32_t SCO_END_TIMESTAMP = 1625097600; // July 1, 2021 12:00:00 AM (GMT)
 
-      static constexpr uint32_t SCO_START_TIMESTAMP = 1591090800; // June 2, 2020 18:40:00 AM (GMT+09:00)
-      static constexpr uint32_t SCO_END_TIMESTAMP = 1591177200; // June 3, 2021 18:40:00 AM (GMT+09:00)
+      static constexpr uint32_t SCO_START_TIMESTAMP = 1591941000; // June 12, 2020 14:50:00 AM (GMT+09:00)
+      static constexpr uint32_t SCO_END_TIMESTAMP = 1591951800; // June 12, 2020 17:50:00 AM (GMT+09:00)
 
       static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING       = 128'000'000'0000ll;
       static constexpr int64_t PIEOS_DIST_STABILITY_FUND            = 18'000'000'0000ll;
@@ -266,7 +266,7 @@ namespace pieos {
          asset            token_share;
          block_timestamp  last_stake_time;
 
-         uint64_t primary_key() const { return token_share.symbol.code().raw(); }
+         uint64_t primary_key() const { return PIEOS_SYMBOL.code().raw(); }
       };
 
       typedef eosio::multi_index< "stakeaccount"_n, stake_account > stake_accounts;
