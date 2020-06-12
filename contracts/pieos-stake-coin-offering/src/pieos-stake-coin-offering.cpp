@@ -71,18 +71,18 @@ namespace pieos {
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
       auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
-      if ( sa_itr == stake_accounts_db.end() ) {
-         stake_accounts_db.emplace( owner, [&]( auto& sa ){
-            sa.core_token_bal = asset( 0, CORE_TOKEN_SYMBOL );
-            sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
-            sa.staked = asset( 0, CORE_TOKEN_SYMBOL );
-            sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
-            sa.proxy_vote = asset( 0, CORE_TOKEN_SYMBOL );
-            sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
-            sa.token_share = asset( 0, TOKEN_SHARE_SYMBOL );
-            sa.last_stake_time = sa.last_stake_time = block_timestamp(0);;
-         });
-      }
+      check( sa_itr == stake_accounts_db.end(), "already opened stake account" );
+
+      stake_accounts_db.emplace( owner, [&]( auto& sa ){
+         sa.core_token_bal = asset( 0, CORE_TOKEN_SYMBOL );
+         sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
+         sa.staked = asset( 0, CORE_TOKEN_SYMBOL );
+         sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
+         sa.proxy_vote = asset( 0, CORE_TOKEN_SYMBOL );
+         sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
+         sa.token_share = asset( 0, TOKEN_SHARE_SYMBOL );
+         sa.last_stake_time = sa.last_stake_time = block_timestamp(0);;
+      });
    }
 
    // [[eosio::action]]
@@ -471,7 +471,7 @@ namespace pieos {
          received.staked_share.amount = share_ratio * stake.amount;
          total_staked_share_amount = received.staked_share.amount;
       } else {
-         asset total_core_token_balance_for_staked = get_total_core_token_amount_for_staked(sp_itr );
+         asset total_core_token_balance_for_staked = get_total_core_token_amount_for_staked( sp_itr );
 
          const int64_t E0 = total_core_token_balance_for_staked.amount;
          const int64_t E1 = E0 + stake.amount;
@@ -554,7 +554,7 @@ namespace pieos {
       check( unstake_amount <= stake_account_staked_amount, "not enough staked balance" );
 
       time_point_sec ct_sec(current_time_point());
-      time_point_sec rex_maturity_last_buyrex = get_rex_maturity(sa_itr->last_stake_time);
+      time_point_sec rex_maturity_last_buyrex = get_rex_maturity( sa_itr->last_stake_time );
 
       check( ct_sec > rex_maturity_last_buyrex, "cannot run unstake until rex maturity time" );
 
