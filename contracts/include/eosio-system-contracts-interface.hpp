@@ -73,6 +73,8 @@ namespace pieos::eosiosystem {
    ///////////////////////////////////////////////////////
    /// eosio system contract (`eosio`)
 
+   static constexpr uint32_t seconds_per_day = 24 * 3600;
+
    struct rex_pool {
       uint8_t    version = 0;
       asset      total_lent;
@@ -87,6 +89,34 @@ namespace pieos::eosiosystem {
    };
 
    typedef eosio::multi_index< "rexpool"_n, rex_pool > rex_pool_table;
+
+   struct rex_return_pool {
+      uint8_t        version = 0;
+      time_point_sec last_dist_time;
+      time_point_sec pending_bucket_time      = time_point_sec::maximum();
+      time_point_sec oldest_bucket_time       = time_point_sec::min();
+      int64_t        pending_bucket_proceeds  = 0;
+      int64_t        current_rate_of_increase = 0;
+      int64_t        proceeds                 = 0;
+
+      static constexpr uint32_t total_intervals  = 30 * 144; // 30 days
+      static constexpr uint32_t dist_interval    = 10 * 60;  // 10 minutes
+      static constexpr uint8_t  hours_per_bucket = 12;
+      static_assert( total_intervals * dist_interval == 30 * seconds_per_day );
+
+      uint64_t primary_key()const { return 0; }
+   };
+
+   typedef eosio::multi_index< "rexretpool"_n, rex_return_pool > rex_return_pool_table;
+
+   struct rex_return_buckets {
+      uint8_t                           version = 0;
+      std::map<time_point_sec, int64_t> return_buckets;
+
+      uint64_t primary_key()const { return 0; }
+   };
+
+   typedef eosio::multi_index< "retbuckets"_n, rex_return_buckets > rex_return_buckets_table;
 
    struct rex_balance {
       uint8_t version = 0;
@@ -214,6 +244,87 @@ namespace pieos::eosiosystem {
       return rb_itr->rex_balance;
    }
 
+   int64_t calc_rex_pool_lendable_change_amount() {
+      auto get_elapsed_intervals = [&]( const time_point_sec& t1, const time_point_sec& t0 ) -> uint32_t {
+         return ( t1.sec_since_epoch() - t0.sec_since_epoch() ) / rex_return_pool::dist_interval;
+      };
+
+      rex_return_pool_table _rexretpool( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
+      rex_return_buckets_table _rexretbuckets( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
+
+      const time_point_sec ct             = current_time_point();
+      const uint32_t       cts            = ct.sec_since_epoch();
+      const time_point_sec effective_time{cts - cts % rex_return_pool::dist_interval};
+
+      const auto ret_pool_elem    = _rexretpool.begin();
+      const auto ret_buckets_elem = _rexretbuckets.begin();
+
+      if ( ret_pool_elem == _rexretpool.end() || effective_time <= ret_pool_elem->last_dist_time ) {
+         return 0;
+      }
+
+      const int64_t  current_rate      = ret_pool_elem->current_rate_of_increase;
+      const uint32_t elapsed_intervals = get_elapsed_intervals( effective_time, ret_pool_elem->last_dist_time );
+      int64_t        change_estimate   = current_rate * elapsed_intervals;
+
+      time_point_sec pending_bucket_time = ret_pool_elem->pending_bucket_time;
+      time_point_sec oldest_bucket_time = ret_pool_elem->oldest_bucket_time;
+      int64_t pending_bucket_proceeds = ret_pool_elem->pending_bucket_proceeds;
+      int64_t proceeds = ret_pool_elem->proceeds;
+
+      int64_t        new_bucket_rate = 0;
+      time_point_sec new_bucket_time = time_point_sec::min();
+      {
+         const bool new_return_bucket = pending_bucket_time <= effective_time;
+
+         if ( new_return_bucket ) {
+            int64_t remainder = pending_bucket_proceeds % rex_return_pool::total_intervals;
+            new_bucket_rate   = ( pending_bucket_proceeds - remainder ) / rex_return_pool::total_intervals;
+            new_bucket_time   = pending_bucket_time;
+            change_estimate             += remainder + new_bucket_rate * get_elapsed_intervals( effective_time, pending_bucket_time );
+            if ( new_bucket_time < oldest_bucket_time ) {
+               oldest_bucket_time = new_bucket_time;
+            }
+         }
+         proceeds -= change_estimate;
+      }
+
+      const time_point_sec time_threshold = effective_time - seconds(rex_return_pool::total_intervals * rex_return_pool::dist_interval);
+      if ( oldest_bucket_time <= time_threshold ) {
+         int64_t expired_rate = 0;
+         int64_t surplus      = 0;
+
+         auto& return_buckets = ret_buckets_elem->return_buckets;
+         auto iter = return_buckets.begin();
+         while ( iter != return_buckets.end() && iter->first <= time_threshold ) {
+            auto next = iter;
+            ++next;
+            const uint32_t overtime = get_elapsed_intervals( effective_time,
+                                                             iter->first + seconds(rex_return_pool::total_intervals * rex_return_pool::dist_interval) );
+            surplus      += iter->second * overtime;
+            expired_rate += iter->second;
+            iter = next;
+         }
+         if ( new_bucket_rate > 0 && new_bucket_time <= time_threshold ) {
+            const uint32_t overtime = get_elapsed_intervals( effective_time,
+                                                             new_bucket_time + seconds(rex_return_pool::total_intervals * rex_return_pool::dist_interval) );
+            surplus      += new_bucket_rate * overtime;
+            expired_rate += new_bucket_rate;
+         }
+
+         if ( surplus > 0 ) {
+            change_estimate -= surplus;
+            proceeds     += surplus;
+         }
+      }
+
+      if ( change_estimate > 0 && proceeds < 0 ) {
+         change_estimate += proceeds;
+      }
+
+      return (change_estimate > 0) ? change_estimate : 0;
+   }
+
    asset rex_to_core_token_balance( const asset& rex_balance ) {
       rex_pool_table rex_pool( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
       auto rp_itr = rex_pool.begin();
@@ -221,7 +332,7 @@ namespace pieos::eosiosystem {
          return asset( 0, CORE_TOKEN_SYMBOL );
       }
 
-      const int64_t S0 = rp_itr->total_lendable.amount;
+      const int64_t S0 = rp_itr->total_lendable.amount + calc_rex_pool_lendable_change_amount();
       const int64_t R0 = rp_itr->total_rex.amount;
       const int64_t eos_balance = (uint128_t(rex_balance.amount) * S0) / R0;
       return asset( eos_balance, CORE_TOKEN_SYMBOL );
@@ -236,8 +347,6 @@ namespace pieos::eosiosystem {
       return rex_to_core_token_balance(account_rex_balance);
    }
 
-   static constexpr uint32_t seconds_per_day = 24 * 3600;
-
    /**
     * @brief Calculates maturity time of purchased REX tokens which is 4 days from end
     * of the day UTC
@@ -249,6 +358,10 @@ namespace pieos::eosiosystem {
       static const uint32_t buyrex_time_sec = buyrex_block_time.to_time_point().sec_since_epoch();
       static const uint32_t r   = buyrex_time_sec % seconds_per_day;
       static const time_point_sec rms{ buyrex_time_sec - r + num_of_maturity_buckets * seconds_per_day };
+
+//      static const uint32_t buyrex_time_sec = buyrex_block_time.to_time_point().sec_since_epoch();
+//      static const time_point_sec rms{ buyrex_time_sec + 60*3 }; // 3 minutes
+
       return rms;
    }
 

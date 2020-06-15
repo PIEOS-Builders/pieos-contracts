@@ -560,7 +560,7 @@ namespace pieos {
 
       if ( staked_share_to_redeem > 0 ) {
          asset rex_balance = get_rex_balance( get_self() );
-         asset rex_core_token_balance = rex_to_core_token_balance(rex_balance );
+         asset rex_core_token_balance = rex_to_core_token_balance( rex_balance );
          asset total_core_token_balance_for_staked = rex_core_token_balance + sp_itr->core_token_for_staked;
 
          const int64_t E0 = total_core_token_balance_for_staked.amount;
