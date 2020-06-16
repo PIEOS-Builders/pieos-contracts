@@ -196,8 +196,8 @@ namespace pieos {
       //static constexpr uint32_t SCO_START_TIMESTAMP = 1593561600; // July 1, 2020 12:00:00 AM (GMT)
       //static constexpr uint32_t SCO_END_TIMESTAMP = 1625097600; // July 1, 2021 12:00:00 AM (GMT)
 
-      static constexpr uint32_t SCO_START_TIMESTAMP = 1591941000; // June 12, 2020 14:50:00 AM (GMT+09:00)
-      static constexpr uint32_t SCO_END_TIMESTAMP = 1591951800; // June 12, 2020 17:50:00 AM (GMT+09:00)
+      static constexpr uint32_t SCO_START_TIMESTAMP = 1592211600; // June 15, 2020 18:00:00 AM (GMT+09:00)
+      static constexpr uint32_t SCO_END_TIMESTAMP = 1592298000; // June 16, 2020 18:00:00 AM (GMT+09:00)
 
       static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING       = 128'000'000'0000ll;
       static constexpr int64_t PIEOS_DIST_STABILITY_FUND            = 18'000'000'0000ll;
@@ -311,6 +311,7 @@ namespace pieos {
          asset staked_and_profit_redeemed;  // symbol:(EOS,4) - original staked EOS + staking profits
          asset token_earned;                // symbol:(PIEOS,4) - received PIEOS token balance
          asset rex_to_sell;                 // symbol:(REX,4) - REX amount to sell
+         asset rex_sold_core_token;         // symbol:(EOS,4) - core token proceeds from the REX to be sold
       };
       unstake_core_token_outcome unstake_core_token( const name& owner, const int64_t unstake_amount, const stake_pool_global::const_iterator& sp_itr );
 

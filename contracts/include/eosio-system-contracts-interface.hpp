@@ -325,17 +325,21 @@ namespace pieos::eosiosystem {
       return (change_estimate > 0) ? change_estimate : 0;
    }
 
-   asset rex_to_core_token_balance( const asset& rex_balance ) {
+   asset rex_to_core_token_balance( const asset& rex_balance, const int64_t rex_pool_lendable_change_amount ) {
       rex_pool_table rex_pool( EOSIO_SYSTEM_CONTRACT, EOSIO_SYSTEM_CONTRACT.value );
       auto rp_itr = rex_pool.begin();
       if ( rp_itr == rex_pool.end() ) {
          return asset( 0, CORE_TOKEN_SYMBOL );
       }
 
-      const int64_t S0 = rp_itr->total_lendable.amount + calc_rex_pool_lendable_change_amount();
+      const int64_t S0 = rp_itr->total_lendable.amount + rex_pool_lendable_change_amount;
       const int64_t R0 = rp_itr->total_rex.amount;
       const int64_t eos_balance = (uint128_t(rex_balance.amount) * S0) / R0;
       return asset( eos_balance, CORE_TOKEN_SYMBOL );
+   }
+
+   asset rex_to_core_token_balance( const asset& rex_balance ) {
+      return rex_to_core_token_balance( rex_balance, calc_rex_pool_lendable_change_amount() );
    }
 
    asset get_total_rex_to_core_token_balance( const name& account ) {
@@ -344,7 +348,7 @@ namespace pieos::eosiosystem {
          return asset( 0, CORE_TOKEN_SYMBOL );
       }
 
-      return rex_to_core_token_balance(account_rex_balance);
+      return rex_to_core_token_balance( account_rex_balance );
    }
 
    /**

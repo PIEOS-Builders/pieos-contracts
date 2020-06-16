@@ -20,7 +20,7 @@ namespace pieos {
          return;
       }
 
-      if ( /*from == REX_FUND_ACCOUNT ||*/ is_account_type( from, ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO ) ) {
+      if ( is_account_type( from, ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO ) ) {
          check( stake_pool_initialized(), "stake pool not initialized" );
          // add EOS token balance for EOS-staked SCO
          auto sp_itr = _stake_pool_db.begin();
@@ -28,12 +28,14 @@ namespace pieos {
             sp.core_token_for_staked.amount += quantity.amount;
          });
       } else if ( is_account_type( from, ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO ) ) {
-         check( stake_pool_initialized(), "stake pool not initialized" );
+         check(stake_pool_initialized(), "stake pool not initialized");
          // add EOS token balance for Proxy-Vote SCO
          auto sp_itr = _stake_pool_db.begin();
-         _stake_pool_db.modify( sp_itr, same_payer, [&]( auto& sp ) {
+         _stake_pool_db.modify(sp_itr, same_payer, [&](auto &sp) {
             sp.core_token_for_proxy_vote.amount += quantity.amount;
          });
+      } else if ( from == REX_FUND_ACCOUNT ) {
+         // do nothing, already updated unstaker's on-contract token balance
       } else if ( from == REX_RAM_FUND_ACCOUNT ) {
          // add EOS token balance to internal account for contract admin
          add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, quantity, get_self() );
@@ -169,7 +171,13 @@ namespace pieos {
       if (unstake_outcome.rex_to_sell.amount > 0) {
          // (inline action) sell rex to receive EOS
          eosio_system_sellrex_action sellrex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
-         sellrex_act.send( get_self(), amount );
+         sellrex_act.send( get_self(), unstake_outcome.rex_to_sell );
+
+         if ( unstake_outcome.rex_sold_core_token.amount > 0 ) {
+            // (inline action) withdraw EOS from rexfund of eosio system contract
+            eosio_system_withdraw_action withdraw_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+            withdraw_act.send( get_self(), unstake_outcome.rex_sold_core_token );
+         }
       }
    }
 
@@ -242,7 +250,7 @@ namespace pieos {
          token_transfer_action transfer_act{ EOSIO_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
          transfer_act.send( get_self(), owner, amount, "PIEOS SCO" );
       } else if ( amount.symbol == PIEOS_SYMBOL ) {
-         token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n }, { owner, "active"_n } } }; // ram_payer : `owner` account
+         token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
          transfer_act.send( get_self(), owner, amount, "PIEOS SCO" );
       }
    }
@@ -527,6 +535,7 @@ namespace pieos {
     *   : redeemed - symbol:(EOS,4) - original staked EOS + staking profits
     *   : token_earned - symbol:(PIEOS,4) - received PIEOS token balance
     *   : rex_to_sell - symbol:(REX,4) - REX amount to sell
+    *   : rex_sold_core_token - symbol:(EOS,4) - core token proceeds from the REX to be sold
     *
     * @pre unstake_amount must be equal or less than the owner's staked amount(EOS)
     */
@@ -554,13 +563,14 @@ namespace pieos {
       const int64_t staked_share_to_redeem = (uint128_t(unstake_amount) * stake_account_staked_share_amount) / stake_account_staked_amount;
       const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100));
 
-      unstake_core_token_outcome outcome { asset( 0, CORE_TOKEN_SYMBOL ), asset ( 0, PIEOS_SYMBOL ), asset( 0, REX_SYMBOL ) };
+      unstake_core_token_outcome outcome { asset( 0, CORE_TOKEN_SYMBOL ), asset ( 0, PIEOS_SYMBOL ), asset( 0, REX_SYMBOL ), asset( 0, CORE_TOKEN_SYMBOL ) };
 
       int64_t eos_proceeds_excluding_rex_selling = 0;
 
       if ( staked_share_to_redeem > 0 ) {
          asset rex_balance = get_rex_balance( get_self() );
-         asset rex_core_token_balance = rex_to_core_token_balance( rex_balance );
+         const int64_t rex_pool_lendable_change_amount = calc_rex_pool_lendable_change_amount();
+         asset rex_core_token_balance = rex_to_core_token_balance( rex_balance, rex_pool_lendable_change_amount );
          asset total_core_token_balance_for_staked = rex_core_token_balance + sp_itr->core_token_for_staked;
 
          const int64_t E0 = total_core_token_balance_for_staked.amount;
@@ -574,7 +584,9 @@ namespace pieos {
          const int64_t rex_amount_to_sell = (uint128_t(staked_share_to_redeem) * rex_balance.amount) / total_staked_share_amount;
          outcome.rex_to_sell.amount = rex_amount_to_sell;
 
-         eos_proceeds_excluding_rex_selling = eos_proceeds - rex_to_core_token_balance( outcome.rex_to_sell ).amount;
+         int64_t rex_sold_core_token_amount = rex_to_core_token_balance( outcome.rex_to_sell, rex_pool_lendable_change_amount ).amount;
+         outcome.rex_sold_core_token.amount = rex_sold_core_token_amount;
+         eos_proceeds_excluding_rex_selling = eos_proceeds - rex_sold_core_token_amount;
 
          stake_account_staked_share_amount -= staked_share_to_redeem;
          total_staked_share_amount = SS1;
