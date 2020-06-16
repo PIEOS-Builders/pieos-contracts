@@ -190,6 +190,7 @@ namespace pieos {
       check_staking_allowed_account( account );
 
       require_auth( PIEOS_PROXY_VOTING_ACCOUNT );
+      check( is_account( account ), "target account does not exist" );
 
       auto sp_itr = _stake_pool_db.begin();
 
@@ -493,7 +494,7 @@ namespace pieos {
          received_token_share_amount = stake.amount * share_ratio;
          total_token_share_amount = received_token_share_amount;
       } else {
-         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000);
          const int64_t EP0 = (total_weighted_staking_amount * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT) + sp_itr->sco_token_unredeemed.amount; // weighted EOS amount + PIEOS amount
          const int64_t EP1 = EP0 + (stake.amount * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT);
          const int64_t TS0 = total_token_share_amount;
@@ -561,7 +562,7 @@ namespace pieos {
       int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
       const int64_t staked_share_to_redeem = (uint128_t(unstake_amount) * stake_account_staked_share_amount) / stake_account_staked_amount;
-      const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100));
+      const int64_t token_share_to_redeem = (uint128_t(unstake_amount) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000));
 
       unstake_core_token_outcome outcome { asset( 0, CORE_TOKEN_SYMBOL ), asset ( 0, PIEOS_SYMBOL ), asset( 0, REX_SYMBOL ), asset( 0, CORE_TOKEN_SYMBOL ) };
 
@@ -593,7 +594,7 @@ namespace pieos {
       }
 
       if ( token_share_to_redeem > 0 ) {
-         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000);
          const int64_t total_unredeemed_sco_token_amount = sp_itr->sco_token_unredeemed.amount;
 
          const int64_t EP0 = (total_weighted_staking_amount * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT) + total_unredeemed_sco_token_amount; // weighted EOS amount + PIEOS amount
@@ -646,14 +647,14 @@ namespace pieos {
       int64_t total_proxy_vote_share_amount = sp_itr->total_proxy_vote_share.amount;
       int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
-      const int64_t stake_proxy_vote_weighted = stake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100;
+      const int64_t stake_proxy_vote_weighted = stake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000;
 
       int64_t received_token_share_amount = 0;
       if ( total_token_share_amount == 0 ) {
          received_token_share_amount = share_ratio * stake_proxy_vote_weighted;
          total_token_share_amount = received_token_share_amount;
       } else {
-         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000);
 
          const int64_t EP0 = (total_weighted_staking_amount * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT) + sp_itr->sco_token_unredeemed.amount; // weighted EOS amount + PIEOS amount
          const int64_t EP1 = EP0 + (stake_proxy_vote_weighted * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT);
@@ -742,13 +743,13 @@ namespace pieos {
       int64_t total_proxy_vote_share_amount = sp_itr->total_proxy_vote_share.amount;
       int64_t total_token_share_amount = sp_itr->total_token_share.amount;
 
-      const int64_t unstake_proxy_vote_weighted = unstake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100;
+      const int64_t unstake_proxy_vote_weighted = unstake_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000;
 
-      const int64_t token_share_to_redeem = (uint128_t(unstake_proxy_vote_weighted) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100));
+      const int64_t token_share_to_redeem = (uint128_t(unstake_proxy_vote_weighted) * stake_account_token_share_amount) / (stake_account_staked_amount + (stake_account_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000));
       const int64_t proxy_vote_share_to_redeem = (uint128_t(unstake_proxy_vote_amount) * stake_account_proxy_vote_share_amount) / stake_account_proxy_vote_amount;
 
       if ( token_share_to_redeem > 0 ) {
-         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 100);
+         const int64_t total_weighted_staking_amount = total_staked_amount + (total_proxy_vote_amount * PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT / 10000);
 
          const int64_t EP0 = (total_weighted_staking_amount * STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT) + sp_itr->sco_token_unredeemed.amount; // weighted EOS amount + PIEOS amount
          const int64_t TS0 = total_token_share_amount;
