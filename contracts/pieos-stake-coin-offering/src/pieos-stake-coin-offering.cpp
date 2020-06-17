@@ -139,7 +139,9 @@ namespace pieos {
       check( stake_pool_initialized(), "stake pool not initialized");
       check_staking_allowed_account( owner );
 
-      require_auth(owner);
+      // before the end od SCO period, owner account auth is required,
+      // after end of SCO period, admin account can execute `unstake` on behalf of the stake `owner` account
+      require_auth_of_owner_or_admin_after_sco_period( owner );
 
       auto sp_itr = _stake_pool_db.begin();
 
@@ -239,7 +241,9 @@ namespace pieos {
       check( amount.amount > 0, "invalid withdrawal amount" );
       check_staking_allowed_account( owner );
 
-      require_auth(owner);
+      // before the end od SCO period, owner account auth is required,
+      // after the end of SCO period, admin account can execute `withdraw` on behalf of the `owner` account
+      require_auth_of_owner_or_admin_after_sco_period( owner );
 
       // adjust token balance on PIEOS contract
       sub_on_contract_token_balance( owner, amount );
@@ -341,7 +345,7 @@ namespace pieos {
 
    /////////////////////////////////////////////////////////////////////////
 
-   void pieos_sco::add_on_contract_token_balance(const name& owner, const asset& value, const name& ram_payer ) {
+   void pieos_sco::add_on_contract_token_balance( const name& owner, const asset& value, const name& ram_payer ) {
       check( value.symbol == CORE_TOKEN_SYMBOL || value.symbol == PIEOS_SYMBOL, "not supported on-contract token symbol (add)" );
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
@@ -378,7 +382,7 @@ namespace pieos {
       }
    }
 
-   void pieos_sco::sub_on_contract_token_balance(const name& owner, const asset& value ) {
+   void pieos_sco::sub_on_contract_token_balance( const name& owner, const asset& value ) {
       stake_accounts stake_accounts_db( get_self(), owner.value );
       const auto& sa = stake_accounts_db.get( PIEOS_SYMBOL.code().raw(), "stake account record not found while sub-token" );
       if ( value.symbol == CORE_TOKEN_SYMBOL ) {
@@ -396,7 +400,7 @@ namespace pieos {
       }
    }
 
-//   asset pieos_sco::get_on_contract_token_balance(const name& account, const symbol& symbol ) const {
+//   asset pieos_sco::get_on_contract_token_balance( const name& account, const symbol& symbol ) const {
 //      check( symbol == CORE_TOKEN_SYMBOL || symbol == PIEOS_SYMBOL, "not supported on-contract token symbol (get)" );
 //
 //      stake_accounts stake_accounts_db( get_self(), account.value );
@@ -450,6 +454,20 @@ namespace pieos {
       asset total_rex_to_core_token_balance = get_total_rex_to_core_token_balance(get_self() );
       asset total_core_token_balance_for_staked = total_rex_to_core_token_balance + sp_itr->core_token_for_staked;
       return total_core_token_balance_for_staked;
+   }
+
+   void pieos_sco::require_auth_of_owner_or_admin_after_sco_period( const name& owner ) {
+      block_timestamp current_block = current_block_time();
+      const block_timestamp sco_end_block { time_point_sec(SCO_END_TIMESTAMP) };
+
+      if ( current_block.slot <= sco_end_block.slot ) {
+         require_auth(owner);
+      } else {
+         // after the end of SCO period, admin account can execute an action on behalf of the `owner` account
+         if ( !has_auth( owner ) ) {
+            check( has_auth( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT ), "owner or admin account auth. required after the end of SCO period" );
+         }
+      }
    }
 
    /**

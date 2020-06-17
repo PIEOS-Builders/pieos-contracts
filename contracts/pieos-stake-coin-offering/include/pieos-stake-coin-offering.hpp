@@ -295,9 +295,9 @@ namespace pieos {
       static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_EOS_STAKED_SCO = 1;
       static constexpr uint32_t ACCOUNT_TYPE_BP_VOTE_REWARD_ACCOUNT_FOR_PROXY_VOTE_SCO = 2;
 
-      void add_on_contract_token_balance(const name& owner, const asset& value, const name& ram_payer );
-      void sub_on_contract_token_balance(const name& owner, const asset& value );
-      //asset get_on_contract_token_balance(const name& account, const symbol& symbol ) const;
+      void add_on_contract_token_balance( const name& owner, const asset& value, const name& ram_payer );
+      void sub_on_contract_token_balance( const name& owner, const asset& value );
+      //asset get_on_contract_token_balance( const name& account, const symbol& symbol ) const;
 
       void set_account_type( const name& account, const uint32_t account_type );
       bool is_account_type( const name& account, const uint32_t account_type ) const;
@@ -305,6 +305,8 @@ namespace pieos {
 
       bool stake_pool_initialized() const { return _stake_pool_db.begin() != _stake_pool_db.end(); }
       asset get_total_core_token_amount_for_staked( const stake_pool_global::const_iterator& sp_itr ) const;
+
+      void require_auth_of_owner_or_admin_after_sco_period( const name& owner );
 
       void stake_core_token( const name& owner, const asset& stake, const stake_pool_global::const_iterator& sp_itr );
 
