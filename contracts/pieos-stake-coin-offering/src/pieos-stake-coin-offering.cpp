@@ -73,18 +73,20 @@ namespace pieos {
 
       stake_accounts stake_accounts_db( get_self(), owner.value );
       auto sa_itr = stake_accounts_db.find( PIEOS_SYMBOL.code().raw() );
-      check( sa_itr == stake_accounts_db.end(), "already opened stake account" );
+      // check( sa_itr == stake_accounts_db.end(), "already opened stake account" );
 
-      stake_accounts_db.emplace( owner, [&]( auto& sa ){
-         sa.core_token_bal = asset( 0, CORE_TOKEN_SYMBOL );
-         sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
-         sa.staked = asset( 0, CORE_TOKEN_SYMBOL );
-         sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
-         sa.proxy_vote = asset( 0, CORE_TOKEN_SYMBOL );
-         sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
-         sa.token_share = asset( 0, TOKEN_SHARE_SYMBOL );
-         sa.last_stake_time = sa.last_stake_time = block_timestamp(0);;
-      });
+      if( sa_itr == stake_accounts_db.end() ) {
+         stake_accounts_db.emplace( owner, [&]( auto& sa ){
+            sa.core_token_bal = asset( 0, CORE_TOKEN_SYMBOL );
+            sa.sco_token_bal = asset( 0, PIEOS_SYMBOL );
+            sa.staked = asset( 0, CORE_TOKEN_SYMBOL );
+            sa.staked_share = asset( 0, STAKED_SHARE_SYMBOL );
+            sa.proxy_vote = asset( 0, CORE_TOKEN_SYMBOL );
+            sa.proxy_vote_share = asset( 0, PROXY_VOTE_SHARE_SYMBOL );
+            sa.token_share = asset( 0, TOKEN_SHARE_SYMBOL );
+            sa.last_stake_time = sa.last_stake_time = block_timestamp(0);;
+         });
+      }
    }
 
    // [[eosio::action]]
