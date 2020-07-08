@@ -163,11 +163,14 @@ namespace pieos {
          asset redeemed_to_unstaker = unstake_outcome.staked_and_profit_redeemed;
 
          const int64_t eos_staking_profit = unstake_outcome.staked_and_profit_redeemed.amount - unstake_amount;
-         const int64_t contract_profit = eos_staking_profit * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
-         if ( contract_profit > 0 ) {
-            redeemed_to_unstaker.amount -= contract_profit;
-            add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, CORE_TOKEN_SYMBOL ), get_self() );
+         if ( eos_staking_profit > 0 ) {
+            const int64_t contract_profit = eos_staking_profit * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 10000;
+            if ( contract_profit > 0 ) {
+               redeemed_to_unstaker.amount -= contract_profit;
+               add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset( contract_profit, CORE_TOKEN_SYMBOL ), get_self() );
+            }
          }
+
          // add user's on-contract EOS balance
          add_on_contract_token_balance( owner, redeemed_to_unstaker, owner );
       }
@@ -226,7 +229,7 @@ namespace pieos {
             // redeemed proxy-vote profit
             asset redeemed_to_unstaker = unstake_by_proxy_outcome.proxy_vote_profit_redeemed;
 
-            const int64_t contract_profit = unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 100;
+            const int64_t contract_profit = unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount * EOS_REX_BP_VOTING_PROFIT_PERCENT_FOR_CONTRACT_ADMIN / 10000;
             if ( contract_profit > 0 ) {
                redeemed_to_unstaker.amount -= contract_profit;
                add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset(contract_profit, CORE_TOKEN_SYMBOL), get_self() );
