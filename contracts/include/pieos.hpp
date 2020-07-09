@@ -9,8 +9,8 @@
 #define EOSIO_SYSTEM_CONTRACT "eosio"_n
 #define EOSIO_TOKEN_CONTRACT "eosio.token"_n
 
-// #define CORE_TOKEN_SYMBOL_STR "EOS"
-#define CORE_TOKEN_SYMBOL_STR "SYS"
+#define CORE_TOKEN_SYMBOL_STR "EOS"
+//#define CORE_TOKEN_SYMBOL_STR "SYS"
 #define CORE_TOKEN_SYMBOL_DECIMAL 4
 #define CORE_TOKEN_SYMBOL eosio::symbol(CORE_TOKEN_SYMBOL_STR,CORE_TOKEN_SYMBOL_DECIMAL)
 
@@ -25,6 +25,7 @@
 /// PIEOS Governance Token
 
 #define PIEOS_TOKEN_CONTRACT "pieostokenct"_n
+//#define PIEOS_TOKEN_CONTRACT "pieostokenc1"_n
 
 #define PIEOS_SYMBOL_STR "PIEOS"
 #define PIEOS_SYMBOL_DECIMAL 4

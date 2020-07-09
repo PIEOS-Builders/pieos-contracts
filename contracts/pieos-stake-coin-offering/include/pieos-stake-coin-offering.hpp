@@ -194,11 +194,8 @@ namespace pieos {
       static constexpr int64_t STAKE_AMOUNT_SCALE_TO_GENERATED_SCO_TOKEN_AMOUNT = 10000;
       static constexpr int32_t PROXY_VOTE_TOKEN_SHARE_REDUCE_PERCENT = 2500; // weight 25.00% of EOS staking share
 
-      //static constexpr uint32_t SCO_START_TIMESTAMP = 1594771200; // July 15, 2020 12:00:00 AM (GMT)
-      //static constexpr uint32_t SCO_END_TIMESTAMP = 1626307200; // July 15, 2021 12:00:00 AM (GMT)
-
-      static constexpr uint32_t SCO_START_TIMESTAMP = 1594211400; // July 8, 2020 12:30:00 PM (GMT)
-      static constexpr uint32_t SCO_END_TIMESTAMP = 1596889800; // August 8, 2020 12:30:00 PM (GMT)
+      static constexpr uint32_t SCO_START_TIMESTAMP = 1594771200; // July 15, 2020 12:00:00 AM (GMT)
+      static constexpr uint32_t SCO_END_TIMESTAMP = 1626307200; // July 15, 2021 12:00:00 AM (GMT)
 
       static constexpr int64_t PIEOS_DIST_STAKE_COIN_OFFERING       = 128'000'000'0000ll;
       static constexpr int64_t PIEOS_DIST_STABILITY_FUND            = 18'000'000'0000ll;
