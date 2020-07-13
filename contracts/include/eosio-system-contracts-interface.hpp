@@ -69,6 +69,12 @@ namespace pieos::eosiosystem {
       return itr->balance;
    }
 
+   bool is_token_account_open( const name& contract, const name& account, const symbol& symbol ) {
+      accounts_table accounts(contract, account.value);
+      auto itr = accounts.find(symbol.code().raw());
+      return itr != accounts.end();
+   }
+
 
    ///////////////////////////////////////////////////////
    /// eosio system contract (`eosio`)

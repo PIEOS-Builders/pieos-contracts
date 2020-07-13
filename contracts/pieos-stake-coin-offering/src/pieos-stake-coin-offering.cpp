@@ -111,7 +111,7 @@ namespace pieos {
    // [[eosio::action]]
    void pieos_sco::stake( const name& owner, const asset& amount ) {
       check( amount.symbol == CORE_TOKEN_SYMBOL, "stake amount symbol precision mismatch" );
-      check( amount.amount > 1'0000, "invalid stake amount" );
+      check( amount.amount >= 1'0000, "invalid stake amount" );
       check( stake_pool_initialized(), "stake pool not initialized" );
       check_staking_allowed_account( owner );
 
@@ -153,9 +153,26 @@ namespace pieos {
       const int64_t unstake_amount = amount.amount;
       auto unstake_outcome = unstake_core_token( owner, unstake_amount, sp_itr );
 
+      if (unstake_outcome.rex_to_sell.amount > 0) {
+         // (inline action) sell rex to receive EOS
+         eosio_system_sellrex_action sellrex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+         sellrex_act.send( get_self(), unstake_outcome.rex_to_sell );
+
+         if ( unstake_outcome.rex_sold_core_token.amount > 0 ) {
+            // (inline action) withdraw EOS from rexfund of eosio system contract
+            eosio_system_withdraw_action withdraw_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
+            withdraw_act.send( get_self(), unstake_outcome.rex_sold_core_token );
+         }
+      }
+
       if ( unstake_outcome.token_earned.amount > 0 ) {
-         // transfer received PIEOS balance ownership from contract to user
-         add_on_contract_token_balance( owner, unstake_outcome.token_earned, owner );
+         // transfer received PIEOS token ownership from contract to user
+         if ( is_token_account_open( PIEOS_TOKEN_CONTRACT, owner, PIEOS_SYMBOL ) ) {
+            token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+            transfer_act.send( get_self(), owner, unstake_outcome.token_earned, "PIEOS SCO" );
+         } else {
+            add_on_contract_token_balance( owner, unstake_outcome.token_earned, owner );
+         }
       }
 
       if ( unstake_outcome.staked_and_profit_redeemed.amount > 0 ) {
@@ -171,19 +188,15 @@ namespace pieos {
             }
          }
 
-         // add user's on-contract EOS balance
-         add_on_contract_token_balance( owner, redeemed_to_unstaker, owner );
-      }
-
-      if (unstake_outcome.rex_to_sell.amount > 0) {
-         // (inline action) sell rex to receive EOS
-         eosio_system_sellrex_action sellrex_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
-         sellrex_act.send( get_self(), unstake_outcome.rex_to_sell );
-
-         if ( unstake_outcome.rex_sold_core_token.amount > 0 ) {
-            // (inline action) withdraw EOS from rexfund of eosio system contract
-            eosio_system_withdraw_action withdraw_act{ EOSIO_SYSTEM_CONTRACT, { { get_self(), "active"_n } } };
-            withdraw_act.send( get_self(), unstake_outcome.rex_sold_core_token );
+         if ( redeemed_to_unstaker.amount > 0 ) {
+            asset contract_core_token_balance = get_token_balance_from_contract( EOSIO_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
+            if ( redeemed_to_unstaker.amount <= contract_core_token_balance.amount + unstake_outcome.rex_sold_core_token.amount ) {
+               token_transfer_action transfer_act{ EOSIO_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+               transfer_act.send( get_self(), owner, redeemed_to_unstaker, "PIEOS SCO - UNSTAKE" );
+            } else {
+               // add user's on-contract EOS balance for later withdrawal
+               add_on_contract_token_balance( owner, redeemed_to_unstaker, owner );
+            }
          }
       }
    }
@@ -221,8 +234,13 @@ namespace pieos {
          auto unstake_by_proxy_outcome = unstake_by_proxy_vote( account, unstake_proxy_vote_amount, sp_itr );
 
          if ( unstake_by_proxy_outcome.token_earned.amount > 0 ) {
-            // transfer received PIEOS balance ownership from contract to user
-            add_on_contract_token_balance( account, unstake_by_proxy_outcome.token_earned, get_self() );
+            // transfer received PIEOS token ownership from contract to user
+            if ( is_token_account_open( PIEOS_TOKEN_CONTRACT, account, PIEOS_SYMBOL ) ) {
+               token_transfer_action transfer_act{ PIEOS_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+               transfer_act.send( get_self(), account, unstake_by_proxy_outcome.token_earned, "PIEOS SCO" );
+            } else {
+               add_on_contract_token_balance( account, unstake_by_proxy_outcome.token_earned, get_self() );
+            }
          }
 
          if ( unstake_by_proxy_outcome.proxy_vote_profit_redeemed.amount > 0 ) {
@@ -234,8 +252,17 @@ namespace pieos {
                redeemed_to_unstaker.amount -= contract_profit;
                add_on_contract_token_balance( PIEOS_SCO_CONTRACT_ADMIN_ACCOUNT, asset(contract_profit, CORE_TOKEN_SYMBOL), get_self() );
             }
-            // add user's on-contract EOS balance
-            add_on_contract_token_balance( account, redeemed_to_unstaker, get_self() );
+
+            if ( redeemed_to_unstaker.amount > 0 ) {
+               asset contract_core_token_balance = get_token_balance_from_contract( EOSIO_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
+               if ( redeemed_to_unstaker.amount <= contract_core_token_balance.amount ) {
+                  token_transfer_action transfer_act{ EOSIO_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
+                  transfer_act.send( get_self(), account, redeemed_to_unstaker, "PIEOS SCO - Proxy Voting Profits" );
+               } else {
+                  // add user's on-contract EOS balance for later withdrawal
+                  add_on_contract_token_balance( account, redeemed_to_unstaker, get_self() );
+               }
+            }
          }
       }
    }
@@ -254,7 +281,7 @@ namespace pieos {
       sub_on_contract_token_balance( owner, amount );
 
       if ( amount.symbol == CORE_TOKEN_SYMBOL ) {
-         asset contract_core_token_balance = get_token_balance_from_contract(EOSIO_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
+         asset contract_core_token_balance = get_token_balance_from_contract( EOSIO_TOKEN_CONTRACT, get_self(), CORE_TOKEN_SYMBOL );
          check(amount <= contract_core_token_balance, "not enough SCO contract's EOS balance because of pending REX sell orders" );
 
          token_transfer_action transfer_act{ EOSIO_TOKEN_CONTRACT, { { get_self(), "active"_n } } };
